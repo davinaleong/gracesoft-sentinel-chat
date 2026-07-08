@@ -107,15 +107,15 @@
 
 ## M4 — `sentinel-cook`
 
-- [ ] Image input handling (single dish photo)
-- [ ] AI call: image → dish identification
-- [ ] AI call: dish → recipe steps
-- [ ] AI call: dish → nutritional information
-- [ ] Response formatting (text-friendly for WhatsApp; no rich UI available)
-- [ ] Define Cook FAQ content (keywords + answers)
-- [ ] Implement `handle()` per M0 contract
-- [ ] Implement `tryFaq()` per M0 contract
-- [ ] Package as installable module
+- [x] Image input handling (single dish photo)
+- [x] AI call: image → dish identification
+- [x] AI call: dish → recipe steps
+- [x] AI call: dish → nutritional information
+- [x] Response formatting (text-friendly for WhatsApp; no rich UI available)
+- [x] Define Cook FAQ content (keywords + answers)
+- [x] Implement `handle()` per M0 contract
+- [x] Implement `tryFaq()` per M0 contract
+- [x] Package as installable module
 
 ---
 

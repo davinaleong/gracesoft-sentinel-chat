@@ -194,17 +194,17 @@ No changes to `gateway-core`'s contract were required. The channel adapter contr
 
 ### Deliverables
 
-| File | Purpose |
-|---|---|
-| `packages/concierge/src/types.ts` | `ConciergeSession` — multi-turn state shape |
-| `packages/concierge/src/faq.ts` | Concierge FAQ entries + `tryConciergeFaq()` |
-| `packages/concierge/src/holidays.ts` | Singapore public holidays 2025–2026 + `isPublicHoliday()`, `isWeekend()` |
-| `packages/concierge/src/calendar.ts` | Google Calendar integration — `getAvailableSlots()`, `createBooking()` |
-| `packages/concierge/src/dateParser.ts` | `parseDate()` — handles "tomorrow", "next Monday", "15 July", "YYYY-MM-DD", etc. |
-| `packages/concierge/src/flow.ts` | `handleConcierge()` — 3-step booking flow (date → time → confirm) |
-| `packages/concierge/src/config.ts` | Reads `GOOGLE_SERVICE_ACCOUNT_EMAIL`, `GOOGLE_SERVICE_ACCOUNT_PRIVATE_KEY`, `GOOGLE_CALENDAR_ID` |
-| `packages/concierge/src/index.ts` | `AppModule<ConciergeSession>` default export |
-| `packages/concierge/.env.example` | Google Calendar env var documentation |
+| File                                   | Purpose                                                                                          |
+| -------------------------------------- | ------------------------------------------------------------------------------------------------ |
+| `packages/concierge/src/types.ts`      | `ConciergeSession` — multi-turn state shape                                                      |
+| `packages/concierge/src/faq.ts`        | Concierge FAQ entries + `tryConciergeFaq()`                                                      |
+| `packages/concierge/src/holidays.ts`   | Singapore public holidays 2025–2026 + `isPublicHoliday()`, `isWeekend()`                         |
+| `packages/concierge/src/calendar.ts`   | Google Calendar integration — `getAvailableSlots()`, `createBooking()`                           |
+| `packages/concierge/src/dateParser.ts` | `parseDate()` — handles "tomorrow", "next Monday", "15 July", "YYYY-MM-DD", etc.                 |
+| `packages/concierge/src/flow.ts`       | `handleConcierge()` — 3-step booking flow (date → time → confirm)                                |
+| `packages/concierge/src/config.ts`     | Reads `GOOGLE_SERVICE_ACCOUNT_EMAIL`, `GOOGLE_SERVICE_ACCOUNT_PRIVATE_KEY`, `GOOGLE_CALENDAR_ID` |
+| `packages/concierge/src/index.ts`      | `AppModule<ConciergeSession>` default export                                                     |
+| `packages/concierge/.env.example`      | Google Calendar env var documentation                                                            |
 
 ### Booking flow (3 turns)
 
@@ -217,10 +217,42 @@ turn 4: text="yes"  → createBooking() → confirmation + status="done"
 
 ### Required env vars
 
-| Variable | Purpose |
+| Variable                             | Purpose                               |
+| ------------------------------------ | ------------------------------------- |
+| `GOOGLE_SERVICE_ACCOUNT_EMAIL`       | Service account for Calendar API auth |
+| `GOOGLE_SERVICE_ACCOUNT_PRIVATE_KEY` | Service account private key (PEM)     |
+| `GOOGLE_CALENDAR_ID`                 | Calendar to check/write bookings      |
+
+---
+
+## M4 — `sentinel-cook`
+
+**Date:** 2026-07-08
+**Status:** ✅ Complete
+
+### Deliverables
+
+| File | Purpose |
 |---|---|
-| `GOOGLE_SERVICE_ACCOUNT_EMAIL` | Service account for Calendar API auth |
-| `GOOGLE_SERVICE_ACCOUNT_PRIVATE_KEY` | Service account private key (PEM) |
-| `GOOGLE_CALENDAR_ID` | Calendar to check/write bookings |
+| `packages/cook/src/types.ts` | `CookSession` — minimal state (`step: "awaiting_photo"`) |
+| `packages/cook/src/faq.ts` | Cook FAQ entries + `tryCookFaq()` |
+| `packages/cook/src/openai.ts` | `analyzeDish()` — gpt-4o vision call with `response_format: json_object` |
+| `packages/cook/src/formatter.ts` | `formatDishAnalysis()` — WhatsApp *bold* / plain text output |
+| `packages/cook/src/flow.ts` | `handleCook()` — cold photo / menu-selected / awaiting-photo flows |
+| `packages/cook/src/config.ts` | Reads `OPENAI_API_KEY` |
+| `packages/cook/src/index.ts` | `AppModule<CookSession>` default export |
+| `packages/cook/.env.example` | `OPENAI_API_KEY` documentation |
+
+### Flow
+
+```
+cold photo (auto-route): session=null + media  → analyzeDish() → formatted reply → status="done"
+menu-selected:           session=null, no photo → prompt for photo → step="awaiting_photo"
+awaiting_photo + photo:  analyzeDish() → reply → status="done"
+awaiting_photo + text:   re-prompt
+```
+
+### OpenAI call details
+- Model: `gpt-4o`, `response_format: { type: "json_object" }`, `detail: "low"`, max_tokens: 1200
 
 ---
