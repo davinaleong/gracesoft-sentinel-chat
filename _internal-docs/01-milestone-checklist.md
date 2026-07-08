@@ -36,14 +36,14 @@
 
 ## M1a — `sentinel-whatsapp-client`
 
-- [ ] WhatsApp Cloud API setup (Meta app, test number, access token)
-- [ ] Webhook signature verification (`X-Hub-Signature-256`)
-- [ ] Send text message
-- [ ] Send media message (image at minimum; document/audio if needed later)
-- [ ] Download inbound media (image from user)
-- [ ] Normalize inbound payload → `{ text?, media? }` shape
-- [ ] Basic error handling (expired media URL, rate limit, invalid number)
-- [ ] Package it as an installable module (npm/git dependency ready)
+- [x] WhatsApp Cloud API setup (Meta app, test number, access token) — env vars documented in dev log
+- [x] Webhook signature verification (`X-Hub-Signature-256`)
+- [x] Send text message
+- [x] Send media message (image at minimum; document/audio if needed later)
+- [x] Download inbound media (image from user)
+- [x] Normalize inbound payload → `{ text?, media? }` shape
+- [x] Basic error handling (expired media URL, rate limit, invalid number)
+- [x] Package it as an installable module (npm/git dependency ready)
 
 ## M1b — `sentinel-telegram-client`
 
