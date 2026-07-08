@@ -265,20 +265,46 @@ awaiting_photo + text:   re-prompt
 
 ### Deliverables
 
-| File | Purpose |
-|---|---|
-| `packages/gateway-whatsapp/src/index.ts` | Wires `concierge` + `cook` into WhatsApp gateway |
-| `packages/gateway-telegram/src/index.ts` | Wires `concierge` + `cook` into Telegram gateway |
-| `jest.config.js` | Root Jest config with ts-jest + `@sentinel/*` module mapper |
-| `tsconfig.test.json` | TypeScript config for tests (workspace paths, includes test files) |
-| `packages/gateway-core/src/__tests__/gateway.test.ts` | 19 integration tests — all E2E scenarios |
-| `.env.example` | Consolidated root env var reference |
+| File                                                  | Purpose                                                            |
+| ----------------------------------------------------- | ------------------------------------------------------------------ |
+| `packages/gateway-whatsapp/src/index.ts`              | Wires `concierge` + `cook` into WhatsApp gateway                   |
+| `packages/gateway-telegram/src/index.ts`              | Wires `concierge` + `cook` into Telegram gateway                   |
+| `jest.config.js`                                      | Root Jest config with ts-jest + `@sentinel/*` module mapper        |
+| `tsconfig.test.json`                                  | TypeScript config for tests (workspace paths, includes test files) |
+| `packages/gateway-core/src/__tests__/gateway.test.ts` | 19 integration tests — all E2E scenarios                           |
+| `.env.example`                                        | Consolidated root env var reference                                |
 
 ### Type fix
+
 `createGateway()` and `createApp()` now accept `AppModule<any>[]` — session types are opaque at the gateway registry level.
 
 ### Test results: 19 / 19 passed ✅
 
 Scenarios covered: cold start, menu, global FAQ, Concierge flow, Cook photo, cold-photo auto-route, menu escape (`"menu"` + `"0"`), in-app FAQ, concurrent session isolation, cross-channel session isolation, Telegram equivalents.
+
+---
+
+## M6 — Showpiece Polish
+
+**Date:** 2026-07-08
+**Status:** ✅ Complete
+
+### Deliverables
+
+| File | Purpose |
+|---|---|
+| `packages/gateway-core/src/logger.ts` | `createLogger(name)` — structured JSON logger (stdout info, stderr warn/error) |
+| `packages/gateway-core/src/index.ts` | Exports `createLogger` + `Logger` type |
+| `packages/gateway-whatsapp/src/webhookRouter.ts` | Updated: structured logging for verify, inbound, reply, errors |
+| `packages/gateway-telegram/src/webhookRouter.ts` | Updated: structured logging for verify, inbound, reply, errors |
+| `README.md` | Full project README (overview, structure, quick start, env vars, tests, architecture) |
+| `_internal-docs/03-demo-script.md` | Step-by-step demo conversation sequences for both apps on both channels |
+| `_internal-docs/04-case-study.md` | SCR write-up for gracesoft.dev portfolio |
+
+### Deployment decision
+Both gateways (`gateway-whatsapp`, `gateway-telegram`) are independent Express services. Deploy on any Node.js host (Railway, Render, Fly.io, or self-hosted). Each exposes:
+- `GET /health` — health check
+- `GET /webhook` (WhatsApp only) — Meta challenge–response
+- `POST /webhook` — inbound messages
 
 ---

@@ -1,11 +1,14 @@
 import express, { Router, Request, Response } from "express";
-import type { Gateway } from "@sentinel/gateway-core";
+import type { Gateway, GatewayInput } from "@sentinel/gateway-core";
+import { createLogger } from "@sentinel/gateway-core";
 import {
   WhatsAppClient,
   verifySignature,
   normalizeWebhookEvent,
 } from "@sentinel/whatsapp-client";
-import type { GatewayInput } from "@sentinel/gateway-core";
+import type { WhatsAppWebhookPayload } from "@sentinel/whatsapp-client";
+
+const log = createLogger("gateway-whatsapp");
 
 export function createWebhookRouter(
   gateway: Gateway,
@@ -22,8 +25,10 @@ export function createWebhookRouter(
     const verifyToken = req.query["hub.verify_token"];
 
     if (mode === "subscribe" && verifyToken === webhookVerifyToken) {
+      log.info("Webhook verified by Meta");
       res.status(200).send(challenge);
     } else {
+      log.warn("Webhook verification failed", { mode, verifyToken });
       res.sendStatus(403);
     }
   });
@@ -36,6 +41,7 @@ export function createWebhookRouter(
       const signature = req.headers["x-hub-signature-256"] as string | undefined;
 
       if (!signature || !verifySignature(req.body as Buffer, signature, appSecret)) {
+        log.warn("Rejected request: invalid signature");
         res.sendStatus(403);
         return;
       }
@@ -44,9 +50,20 @@ export function createWebhookRouter(
       res.sendStatus(200);
 
       try {
-        const payload = JSON.parse((req.body as Buffer).toString("utf8"));
+        const payload = JSON.parse(
+          (req.body as Buffer).toString("utf8")
+        ) as WhatsAppWebhookPayload;
+
         const event = normalizeWebhookEvent(payload);
-        if (!event) return; // status update or unsupported type
+        if (!event) {
+          log.info("Ignoring non-message webhook event");
+          return;
+        }
+
+        log.info("Inbound message", {
+          from: event.from,
+          type: event.rawMedia ? event.rawMedia.type : "text",
+        });
 
         // Build GatewayInput, resolving media ID to URL if needed
         const gatewayInput: GatewayInput = {
@@ -72,8 +89,12 @@ export function createWebhookRouter(
         for (const reply of replies) {
           await client.sendText(to, reply);
         }
+
+        log.info("Replied", { to, replyCount: replies.length });
       } catch (err) {
-        console.error("[gateway-whatsapp] Error processing webhook:", err);
+        log.error("Error processing webhook", {
+          error: err instanceof Error ? err.message : String(err),
+        });
       }
     }
   );

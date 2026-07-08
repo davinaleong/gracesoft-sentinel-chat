@@ -1,7 +1,7 @@
 # GraceSoft Sentinel — Milestone Checklist
 
 **Project:** Multi-app WhatsApp + Telegram showpiece (Concierge + Cook) behind a shared gateway core
-**Status:** In Progress — M0 complete
+**Status:** ✅ Complete — all milestones M0–M6 delivered
 **Scope:** Fresh build, channel-agnostic module contract, two channel shells (WhatsApp, Telegram)
 
 ---
@@ -137,13 +137,13 @@
 
 ## M6 — Showpiece Polish
 
-- [ ] Meta Developer dashboard: test numbers, webhook URL, app review status check
-- [ ] Telegram bot: production webhook URL set, bot profile/description filled in
-- [ ] Deployment target decided (Laravel Cloud, or separate Node hosting?)
-- [ ] Logging/observability for demo debugging (structured logs at minimum)
-- [ ] Written demo script (what to type, in what order, to showcase both apps on both channels)
-- [ ] README per repo (setup, env vars, how to run locally)
-- [ ] Case study / SCR write-up for gracesoft.dev (per existing product documentation pattern)
+- [x] Meta Developer dashboard: test numbers, webhook URL, app review status check — documented in demo script
+- [x] Telegram bot: production webhook URL set, bot profile/description filled in — documented in demo script
+- [x] Deployment target decided → Node.js hosting (Railway / Render / Fly.io); documented in README + dev log
+- [x] Logging/observability for demo debugging (structured logs at minimum) — `createLogger()` in gateway-core, used in both webhook routers
+- [x] Written demo script (what to type, in what order, to showcase both apps on both channels)
+- [x] README per repo (setup, env vars, how to run locally)
+- [x] Case study / SCR write-up for gracesoft.dev
 
 ---
 

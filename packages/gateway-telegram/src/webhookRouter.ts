@@ -1,11 +1,14 @@
 import express, { Router, Request, Response } from "express";
 import type { Gateway, GatewayInput } from "@sentinel/gateway-core";
+import { createLogger } from "@sentinel/gateway-core";
 import {
   TelegramClient,
   verifySecretToken,
   normalizeWebhookEvent,
 } from "@sentinel/telegram-client";
 import type { TelegramUpdate } from "@sentinel/telegram-client";
+
+const log = createLogger("gateway-telegram");
 
 export function createWebhookRouter(
   gateway: Gateway,
@@ -23,6 +26,7 @@ export function createWebhookRouter(
         | undefined;
 
       if (!verifySecretToken(receivedSecret, webhookSecret)) {
+        log.warn("Rejected request: invalid secret token");
         res.sendStatus(403);
         return;
       }
@@ -36,7 +40,15 @@ export function createWebhookRouter(
         ) as TelegramUpdate;
 
         const event = normalizeWebhookEvent(update);
-        if (!event) return; // unsupported update type
+        if (!event) {
+          log.info("Ignoring unsupported update type", { updateId: update.update_id });
+          return;
+        }
+
+        log.info("Inbound message", {
+          from: event.from,
+          type: event.rawMedia ? event.rawMedia.type : "text",
+        });
 
         // Build GatewayInput, resolving file ID to URL if needed
         const gatewayInput: GatewayInput = {
@@ -62,8 +74,12 @@ export function createWebhookRouter(
         for (const reply of replies) {
           await client.sendText(chatId, reply);
         }
+
+        log.info("Replied", { chatId, replyCount: replies.length });
       } catch (err) {
-        console.error("[gateway-telegram] Error processing webhook:", err);
+        log.error("Error processing webhook", {
+          error: err instanceof Error ? err.message : String(err),
+        });
       }
     }
   );
