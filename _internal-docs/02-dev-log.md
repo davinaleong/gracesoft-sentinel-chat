@@ -76,25 +76,56 @@
 
 ### Deliverables
 
-| File | Purpose |
-|---|---|
-| `packages/telegram-client/src/types.ts` | Telegram Bot API payload types + normalised output shapes |
-| `packages/telegram-client/src/errors.ts` | `TelegramApiError`, `WebhookSecretError` |
-| `packages/telegram-client/src/verify.ts` | `verifySecretToken()` — timing-safe compare of `X-Telegram-Bot-Api-Secret-Token` |
-| `packages/telegram-client/src/normalize.ts` | `normalizeWebhookEvent()` — maps text / photo / document / audio / voice |
+| File                                             | Purpose                                                                                           |
+| ------------------------------------------------ | ------------------------------------------------------------------------------------------------- |
+| `packages/telegram-client/src/types.ts`          | Telegram Bot API payload types + normalised output shapes                                         |
+| `packages/telegram-client/src/errors.ts`         | `TelegramApiError`, `WebhookSecretError`                                                          |
+| `packages/telegram-client/src/verify.ts`         | `verifySecretToken()` — timing-safe compare of `X-Telegram-Bot-Api-Secret-Token`                  |
+| `packages/telegram-client/src/normalize.ts`      | `normalizeWebhookEvent()` — maps text / photo / document / audio / voice                          |
 | `packages/telegram-client/src/TelegramClient.ts` | `TelegramClient` class — `sendText`, `sendPhoto`, `getFileUrl`, `downloadFile`, `registerWebhook` |
-| `packages/telegram-client/src/index.ts` | Package public API exports |
+| `packages/telegram-client/src/index.ts`          | Package public API exports                                                                        |
 
 ### Required env vars (consumed by `gateway-telegram`)
 
-| Variable | Purpose |
-|---|---|
-| `TELEGRAM_BOT_TOKEN` | BotFather token |
+| Variable                  | Purpose                                  |
+| ------------------------- | ---------------------------------------- |
+| `TELEGRAM_BOT_TOKEN`      | BotFather token                          |
 | `TELEGRAM_WEBHOOK_SECRET` | Secret token registered via `setWebhook` |
 
 ### Notes
+
 - Photo messages: Telegram sends an array of `PhotoSize` objects at different resolutions; the largest (last) is used.
 - `NormalizedEvent` shape is identical to the WhatsApp client's — same contract for gateway-core.
 - `registerWebhook()` is a one-time setup helper; not called during normal message handling.
+
+---
+
+## M2a — `sentinel-gateway-core`
+
+**Date:** 2026-07-08
+**Status:** ✅ Complete
+
+### Deliverables
+
+| File | Purpose |
+|---|---|
+| `packages/gateway-core/src/session.ts` | `SessionManager` — in-memory `Map<ChannelUserId, UserSession>` with get / set / clear |
+| `packages/gateway-core/src/menu.ts` | `MENU_TEXT`, `isMenuEscape()`, `parseMenuSelection()` |
+| `packages/gateway-core/src/faq.ts` | Global FAQ entries + `tryGlobalFaq()` |
+| `packages/gateway-core/src/gateway.ts` | `createGateway(apps)` factory — `process()` entry point |
+| `packages/gateway-core/src/index.ts` | Updated to export all new symbols |
+
+### `process()` logic flow
+
+1. **Global escape** — `text` matches `"menu"` / `"0"` → clear session, return menu
+2. **No active app:**
+   - Global FAQ → return answer if match
+   - Menu selection (`"1"` / `"2"`) → set `activeApp`, fall through to dispatch
+   - Cold image → set `activeApp = "cook"`, fall through to dispatch
+   - Otherwise → return menu
+3. **Active app:**
+   - App's `tryFaq()` → return answer if match
+   - `app.handle()` → persist session, return reply
+   - `status === "done"` or `session === null` → clear session, append menu
 
 ---

@@ -60,16 +60,16 @@
 
 ## M2a — `sentinel-gateway-core` (channel-agnostic)
 
-- [ ] In-memory session store (per user identifier — channel-neutral, not "phone number")
-- [ ] Numeric menu rendering (`1. Concierge`, `2. Cook`, etc.)
-- [ ] Menu selection handling (numeric input → set `activeApp`)
-- [ ] Global FAQ (top-level: "what is this", "what is Concierge", "what is Cook")
-- [ ] Routing: forward message to active app's `handle()`
-- [ ] In-app FAQ dispatch: try active app's `tryFaq()` before `handle()`
-- [ ] Global "menu"/"0" escape hatch (per M0 decision)
-- [ ] Session teardown when app reports `status: "done"`
-- [ ] Expose a single entry point channel shells call (e.g. `process(input): output`)
-- [ ] Package as installable module (consumed by `gateway-whatsapp`, and any future channel shell)
+- [x] In-memory session store (per user identifier — channel-neutral, not "phone number")
+- [x] Numeric menu rendering (`1. Concierge`, `2. Cook`, etc.)
+- [x] Menu selection handling (numeric input → set `activeApp`)
+- [x] Global FAQ (top-level: "what is this", "what is Concierge", "what is Cook")
+- [x] Routing: forward message to active app's `handle()`
+- [x] In-app FAQ dispatch: try active app's `tryFaq()` before `handle()`
+- [x] Global "menu"/"0" escape hatch (per M0 decision)
+- [x] Session teardown when app reports `status: "done"`
+- [x] Expose a single entry point channel shells call (e.g. `process(input): output`)
+- [x] Package as installable module (consumed by `gateway-whatsapp`, and any future channel shell)
 
 ## M2b — `sentinel-gateway-whatsapp` (thin shell)
 
