@@ -291,18 +291,20 @@ Scenarios covered: cold start, menu, global FAQ, Concierge flow, Cook photo, col
 
 ### Deliverables
 
-| File | Purpose |
-|---|---|
-| `packages/gateway-core/src/logger.ts` | `createLogger(name)` — structured JSON logger (stdout info, stderr warn/error) |
-| `packages/gateway-core/src/index.ts` | Exports `createLogger` + `Logger` type |
-| `packages/gateway-whatsapp/src/webhookRouter.ts` | Updated: structured logging for verify, inbound, reply, errors |
-| `packages/gateway-telegram/src/webhookRouter.ts` | Updated: structured logging for verify, inbound, reply, errors |
-| `README.md` | Full project README (overview, structure, quick start, env vars, tests, architecture) |
-| `_internal-docs/03-demo-script.md` | Step-by-step demo conversation sequences for both apps on both channels |
-| `_internal-docs/04-case-study.md` | SCR write-up for gracesoft.dev portfolio |
+| File                                             | Purpose                                                                               |
+| ------------------------------------------------ | ------------------------------------------------------------------------------------- |
+| `packages/gateway-core/src/logger.ts`            | `createLogger(name)` — structured JSON logger (stdout info, stderr warn/error)        |
+| `packages/gateway-core/src/index.ts`             | Exports `createLogger` + `Logger` type                                                |
+| `packages/gateway-whatsapp/src/webhookRouter.ts` | Updated: structured logging for verify, inbound, reply, errors                        |
+| `packages/gateway-telegram/src/webhookRouter.ts` | Updated: structured logging for verify, inbound, reply, errors                        |
+| `README.md`                                      | Full project README (overview, structure, quick start, env vars, tests, architecture) |
+| `_internal-docs/03-demo-script.md`               | Step-by-step demo conversation sequences for both apps on both channels               |
+| `_internal-docs/04-case-study.md`                | SCR write-up for gracesoft.dev portfolio                                              |
 
 ### Deployment decision
+
 Both gateways (`gateway-whatsapp`, `gateway-telegram`) are independent Express services. Deploy on any Node.js host (Railway, Render, Fly.io, or self-hosted). Each exposes:
+
 - `GET /health` — health check
 - `GET /webhook` (WhatsApp only) — Meta challenge–response
 - `POST /webhook` — inbound messages
