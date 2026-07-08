@@ -47,14 +47,14 @@
 
 ## M1b — `sentinel-telegram-client`
 
-- [ ] Telegram Bot API setup (BotFather token, webhook registration)
-- [ ] Webhook secret token verification
-- [ ] Send text message
-- [ ] Send media message (image at minimum)
-- [ ] Download inbound media (photo from user)
-- [ ] Normalize inbound payload → `{ text?, media? }` shape (same shape as WhatsApp client's output)
-- [ ] Basic error handling (rate limit, invalid chat id)
-- [ ] Package it as an installable module (npm/git dependency ready)
+- [x] Telegram Bot API setup (BotFather token, webhook registration)
+- [x] Webhook secret token verification
+- [x] Send text message
+- [x] Send media message (image at minimum)
+- [x] Download inbound media (photo from user)
+- [x] Normalize inbound payload → `{ text?, media? }` shape (same shape as WhatsApp client's output)
+- [x] Basic error handling (rate limit, invalid chat id)
+- [x] Package it as an installable module (npm/git dependency ready)
 
 ---
 

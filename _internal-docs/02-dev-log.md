@@ -43,27 +43,58 @@
 
 ### Deliverables
 
-| File | Purpose |
-|---|---|
-| `packages/whatsapp-client/src/types.ts` | WhatsApp Cloud API payload types + normalised output shapes |
-| `packages/whatsapp-client/src/errors.ts` | `WhatsAppApiError`, `WebhookSignatureError` |
-| `packages/whatsapp-client/src/verify.ts` | `verifySignature()` — HMAC-SHA256 with timing-safe compare |
-| `packages/whatsapp-client/src/normalize.ts` | `normalizeWebhookEvent()` — maps text / image / document / audio |
+| File                                             | Purpose                                                                          |
+| ------------------------------------------------ | -------------------------------------------------------------------------------- |
+| `packages/whatsapp-client/src/types.ts`          | WhatsApp Cloud API payload types + normalised output shapes                      |
+| `packages/whatsapp-client/src/errors.ts`         | `WhatsAppApiError`, `WebhookSignatureError`                                      |
+| `packages/whatsapp-client/src/verify.ts`         | `verifySignature()` — HMAC-SHA256 with timing-safe compare                       |
+| `packages/whatsapp-client/src/normalize.ts`      | `normalizeWebhookEvent()` — maps text / image / document / audio                 |
 | `packages/whatsapp-client/src/WhatsAppClient.ts` | `WhatsAppClient` class — `sendText`, `sendImage`, `getMediaUrl`, `downloadMedia` |
-| `packages/whatsapp-client/src/index.ts` | Package public API exports |
+| `packages/whatsapp-client/src/index.ts`          | Package public API exports                                                       |
 
 ### Required env vars (consumed by `gateway-whatsapp`)
 
-| Variable | Purpose |
-|---|---|
-| `WHATSAPP_PHONE_NUMBER_ID` | Meta phone number ID |
-| `WHATSAPP_ACCESS_TOKEN` | Meta access token |
-| `WHATSAPP_APP_SECRET` | Meta app secret (for `X-Hub-Signature-256` verification) |
-| `WHATSAPP_WEBHOOK_VERIFY_TOKEN` | Custom token for webhook challenge–response |
+| Variable                        | Purpose                                                  |
+| ------------------------------- | -------------------------------------------------------- |
+| `WHATSAPP_PHONE_NUMBER_ID`      | Meta phone number ID                                     |
+| `WHATSAPP_ACCESS_TOKEN`         | Meta access token                                        |
+| `WHATSAPP_APP_SECRET`           | Meta app secret (for `X-Hub-Signature-256` verification) |
+| `WHATSAPP_WEBHOOK_VERIFY_TOKEN` | Custom token for webhook challenge–response              |
 
 ### Notes
+
 - `axios` 1.x ships its own TypeScript types — `@types/axios` is not needed.
 - Inbound media is returned as `rawMedia.mediaId`; gateway-whatsapp must call `client.getMediaUrl()` to resolve to a URL before forwarding to gateway-core.
 - Signature verification uses `crypto.timingSafeEqual` to prevent timing attacks.
+
+---
+
+## M1b — `sentinel-telegram-client`
+
+**Date:** 2026-07-08
+**Status:** ✅ Complete
+
+### Deliverables
+
+| File | Purpose |
+|---|---|
+| `packages/telegram-client/src/types.ts` | Telegram Bot API payload types + normalised output shapes |
+| `packages/telegram-client/src/errors.ts` | `TelegramApiError`, `WebhookSecretError` |
+| `packages/telegram-client/src/verify.ts` | `verifySecretToken()` — timing-safe compare of `X-Telegram-Bot-Api-Secret-Token` |
+| `packages/telegram-client/src/normalize.ts` | `normalizeWebhookEvent()` — maps text / photo / document / audio / voice |
+| `packages/telegram-client/src/TelegramClient.ts` | `TelegramClient` class — `sendText`, `sendPhoto`, `getFileUrl`, `downloadFile`, `registerWebhook` |
+| `packages/telegram-client/src/index.ts` | Package public API exports |
+
+### Required env vars (consumed by `gateway-telegram`)
+
+| Variable | Purpose |
+|---|---|
+| `TELEGRAM_BOT_TOKEN` | BotFather token |
+| `TELEGRAM_WEBHOOK_SECRET` | Secret token registered via `setWebhook` |
+
+### Notes
+- Photo messages: Telegram sends an array of `PhotoSize` objects at different resolutions; the largest (last) is used.
+- `NormalizedEvent` shape is identical to the WhatsApp client's — same contract for gateway-core.
+- `registerWebhook()` is a one-time setup helper; not called during normal message handling.
 
 ---
