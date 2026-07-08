@@ -107,13 +107,13 @@
 
 ### Deliverables
 
-| File | Purpose |
-|---|---|
+| File                                   | Purpose                                                                               |
+| -------------------------------------- | ------------------------------------------------------------------------------------- |
 | `packages/gateway-core/src/session.ts` | `SessionManager` — in-memory `Map<ChannelUserId, UserSession>` with get / set / clear |
-| `packages/gateway-core/src/menu.ts` | `MENU_TEXT`, `isMenuEscape()`, `parseMenuSelection()` |
-| `packages/gateway-core/src/faq.ts` | Global FAQ entries + `tryGlobalFaq()` |
-| `packages/gateway-core/src/gateway.ts` | `createGateway(apps)` factory — `process()` entry point |
-| `packages/gateway-core/src/index.ts` | Updated to export all new symbols |
+| `packages/gateway-core/src/menu.ts`    | `MENU_TEXT`, `isMenuEscape()`, `parseMenuSelection()`                                 |
+| `packages/gateway-core/src/faq.ts`     | Global FAQ entries + `tryGlobalFaq()`                                                 |
+| `packages/gateway-core/src/gateway.ts` | `createGateway(apps)` factory — `process()` entry point                               |
+| `packages/gateway-core/src/index.ts`   | Updated to export all new symbols                                                     |
 
 ### `process()` logic flow
 
@@ -127,5 +127,35 @@
    - App's `tryFaq()` → return answer if match
    - `app.handle()` → persist session, return reply
    - `status === "done"` or `session === null` → clear session, append menu
+
+---
+
+## M2b — `sentinel-gateway-whatsapp`
+
+**Date:** 2026-07-08
+**Status:** ✅ Complete
+
+### Deliverables
+
+| File                                             | Purpose                                                          |
+| ------------------------------------------------ | ---------------------------------------------------------------- |
+| `packages/gateway-whatsapp/src/config.ts`        | Reads and validates required env vars at startup                 |
+| `packages/gateway-whatsapp/src/webhookRouter.ts` | GET challenge + POST message handler                             |
+| `packages/gateway-whatsapp/src/app.ts`           | Express app factory — wires webhook router with gateway + client |
+| `packages/gateway-whatsapp/src/index.ts`         | Entry point — app registration placeholder (apps wired in M5)    |
+| `packages/gateway-whatsapp/.env.example`         | Documents all required env vars                                  |
+
+### POST /webhook flow
+
+1. Verify `X-Hub-Signature-256` → 403 if invalid
+2. Acknowledge `200` immediately (before async processing)
+3. `normalizeWebhookEvent()` → skip status updates / unsupported types
+4. If `rawMedia` → `client.getMediaUrl()` resolves ID to URL
+5. `gateway.process(GatewayInput)` → `GatewayOutput`
+6. Strip `"whatsapp:"` prefix, send each reply via `client.sendText()`
+
+### Verification
+
+- Zero menu / routing / session logic — all delegated to `gateway-core`.
 
 ---

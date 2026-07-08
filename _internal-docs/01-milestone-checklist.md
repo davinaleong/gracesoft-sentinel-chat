@@ -73,12 +73,12 @@
 
 ## M2b — `sentinel-gateway-whatsapp` (thin shell)
 
-- [ ] Webhook endpoint (receive + verify + ack)
-- [ ] Translate inbound WhatsApp payload → `gateway-core`'s expected input shape
-- [ ] Translate `gateway-core`'s reply → outbound WhatsApp send call
-- [ ] Wire in `sentinel-whatsapp-client` for actual send/receive/media
-- [ ] Import and call `sentinel-gateway-core` as a dependency
-- [ ] Confirm this repo contains _no_ menu/routing/session logic — only translation + wiring
+- [x] Webhook endpoint (receive + verify + ack)
+- [x] Translate inbound WhatsApp payload → `gateway-core`'s expected input shape
+- [x] Translate `gateway-core`'s reply → outbound WhatsApp send call
+- [x] Wire in `sentinel-whatsapp-client` for actual send/receive/media
+- [x] Import and call `sentinel-gateway-core` as a dependency
+- [x] Confirm this repo contains _no_ menu/routing/session logic — only translation + wiring
 
 ## M2c — `sentinel-gateway-telegram` (thin shell)
 

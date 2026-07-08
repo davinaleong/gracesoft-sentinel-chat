@@ -2,7 +2,12 @@
   "extends": "../../tsconfig.base.json",
   "compilerOptions": {
     "rootDir": "src",
-    "outDir": "dist"
+    "outDir": "dist",
+    "composite": true
   },
+  "references": [
+    { "path": "../gateway-core" },
+    { "path": "../whatsapp-client" }
+  ],
   "include": ["src/**/*"]
 }
