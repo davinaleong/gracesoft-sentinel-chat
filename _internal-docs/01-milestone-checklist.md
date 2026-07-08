@@ -121,17 +121,17 @@
 
 ## M5 — Integration
 
-- [ ] `gateway-core` imports Concierge + Cook as git/npm dependencies
-- [ ] `gateway-whatsapp` imports `gateway-core` + `sentinel-whatsapp-client`
-- [ ] `gateway-telegram` imports `gateway-core` + `sentinel-telegram-client`
-- [ ] End-to-end test (WhatsApp): cold start → menu → Concierge → booking → done → back to menu
-- [ ] End-to-end test (WhatsApp): cold start → menu → Cook → photo → recipe → done → back to menu
-- [ ] End-to-end test (Telegram): same two flows as above
-- [ ] End-to-end test: mid-flow "menu" interrupt on both apps, both channels
-- [ ] End-to-end test: FAQ hit inside each app, both channels
-- [ ] End-to-end test: global FAQ at top-level menu, both channels
-- [ ] Verify session isolation across concurrent users on the same channel
-- [ ] Verify session isolation across the same user's identity on different channels (e.g. no cross-channel bleed)
+- [x] `gateway-core` imports Concierge + Cook as git/npm dependencies
+- [x] `gateway-whatsapp` imports `gateway-core` + `sentinel-whatsapp-client`
+- [x] `gateway-telegram` imports `gateway-core` + `sentinel-telegram-client`
+- [x] End-to-end test (WhatsApp): cold start → menu → Concierge → booking → done → back to menu
+- [x] End-to-end test (WhatsApp): cold start → menu → Cook → photo → recipe → done → back to menu
+- [x] End-to-end test (Telegram): same two flows as above
+- [x] End-to-end test: mid-flow "menu" interrupt on both apps, both channels
+- [x] End-to-end test: FAQ hit inside each app, both channels
+- [x] End-to-end test: global FAQ at top-level menu, both channels
+- [x] Verify session isolation across concurrent users on the same channel
+- [x] Verify session isolation across the same user's identity on different channels (e.g. no cross-channel bleed)
 
 ---
 

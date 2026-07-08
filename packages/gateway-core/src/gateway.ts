@@ -13,9 +13,9 @@ export interface Gateway {
  *
  * @param apps - Array of AppModule implementations (concierge, cook, …).
  */
-export function createGateway(apps: AppModule[]): Gateway {
+export function createGateway(apps: AppModule<any>[]): Gateway {
   const sessions = new SessionManager();
-  const appMap = new Map<AppName, AppModule>(
+  const appMap = new Map<AppName, AppModule<any>>(
     apps.map((a) => [a.name, a])
   );
 

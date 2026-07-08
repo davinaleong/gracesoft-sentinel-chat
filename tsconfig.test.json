@@ -1,0 +1,20 @@
+{
+  "extends": "./tsconfig.base.json",
+  "compilerOptions": {
+    "baseUrl": ".",
+    "paths": {
+      "@sentinel/gateway-core": ["packages/gateway-core/src/index.ts"],
+      "@sentinel/gateway-core/*": ["packages/gateway-core/src/*"],
+      "@sentinel/whatsapp-client": ["packages/whatsapp-client/src/index.ts"],
+      "@sentinel/whatsapp-client/*": ["packages/whatsapp-client/src/*"],
+      "@sentinel/telegram-client": ["packages/telegram-client/src/index.ts"],
+      "@sentinel/telegram-client/*": ["packages/telegram-client/src/*"],
+      "@sentinel/concierge": ["packages/concierge/src/index.ts"],
+      "@sentinel/concierge/*": ["packages/concierge/src/*"],
+      "@sentinel/cook": ["packages/cook/src/index.ts"],
+      "@sentinel/cook/*": ["packages/cook/src/*"]
+    }
+  },
+  "include": ["packages/*/src/**/*"],
+  "exclude": ["node_modules", "**/dist"]
+}

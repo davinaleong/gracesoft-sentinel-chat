@@ -232,16 +232,16 @@ turn 4: text="yes"  → createBooking() → confirmation + status="done"
 
 ### Deliverables
 
-| File | Purpose |
-|---|---|
-| `packages/cook/src/types.ts` | `CookSession` — minimal state (`step: "awaiting_photo"`) |
-| `packages/cook/src/faq.ts` | Cook FAQ entries + `tryCookFaq()` |
-| `packages/cook/src/openai.ts` | `analyzeDish()` — gpt-4o vision call with `response_format: json_object` |
-| `packages/cook/src/formatter.ts` | `formatDishAnalysis()` — WhatsApp *bold* / plain text output |
-| `packages/cook/src/flow.ts` | `handleCook()` — cold photo / menu-selected / awaiting-photo flows |
-| `packages/cook/src/config.ts` | Reads `OPENAI_API_KEY` |
-| `packages/cook/src/index.ts` | `AppModule<CookSession>` default export |
-| `packages/cook/.env.example` | `OPENAI_API_KEY` documentation |
+| File                             | Purpose                                                                  |
+| -------------------------------- | ------------------------------------------------------------------------ |
+| `packages/cook/src/types.ts`     | `CookSession` — minimal state (`step: "awaiting_photo"`)                 |
+| `packages/cook/src/faq.ts`       | Cook FAQ entries + `tryCookFaq()`                                        |
+| `packages/cook/src/openai.ts`    | `analyzeDish()` — gpt-4o vision call with `response_format: json_object` |
+| `packages/cook/src/formatter.ts` | `formatDishAnalysis()` — WhatsApp _bold_ / plain text output             |
+| `packages/cook/src/flow.ts`      | `handleCook()` — cold photo / menu-selected / awaiting-photo flows       |
+| `packages/cook/src/config.ts`    | Reads `OPENAI_API_KEY`                                                   |
+| `packages/cook/src/index.ts`     | `AppModule<CookSession>` default export                                  |
+| `packages/cook/.env.example`     | `OPENAI_API_KEY` documentation                                           |
 
 ### Flow
 
@@ -253,6 +253,32 @@ awaiting_photo + text:   re-prompt
 ```
 
 ### OpenAI call details
+
 - Model: `gpt-4o`, `response_format: { type: "json_object" }`, `detail: "low"`, max_tokens: 1200
+
+---
+
+## M5 — Integration
+
+**Date:** 2026-07-08
+**Status:** ✅ Complete
+
+### Deliverables
+
+| File | Purpose |
+|---|---|
+| `packages/gateway-whatsapp/src/index.ts` | Wires `concierge` + `cook` into WhatsApp gateway |
+| `packages/gateway-telegram/src/index.ts` | Wires `concierge` + `cook` into Telegram gateway |
+| `jest.config.js` | Root Jest config with ts-jest + `@sentinel/*` module mapper |
+| `tsconfig.test.json` | TypeScript config for tests (workspace paths, includes test files) |
+| `packages/gateway-core/src/__tests__/gateway.test.ts` | 19 integration tests — all E2E scenarios |
+| `.env.example` | Consolidated root env var reference |
+
+### Type fix
+`createGateway()` and `createApp()` now accept `AppModule<any>[]` — session types are opaque at the gateway registry level.
+
+### Test results: 19 / 19 passed ✅
+
+Scenarios covered: cold start, menu, global FAQ, Concierge flow, Cook photo, cold-photo auto-route, menu escape (`"menu"` + `"0"`), in-app FAQ, concurrent session isolation, cross-channel session isolation, Telegram equivalents.
 
 ---

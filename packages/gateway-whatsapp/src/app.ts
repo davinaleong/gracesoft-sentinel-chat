@@ -10,7 +10,7 @@ import { config } from "./config";
  *
  * @param apps - Registered app modules (passed in from index.ts at startup).
  */
-export function createApp(apps: AppModule[]) {
+export function createApp(apps: AppModule<any>[]) {
   const gateway = createGateway(apps);
   const client = new WhatsAppClient({
     phoneNumberId: config.phoneNumberId,
