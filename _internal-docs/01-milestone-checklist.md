@@ -82,13 +82,13 @@
 
 ## M2c — `sentinel-gateway-telegram` (thin shell)
 
-- [ ] Webhook endpoint (receive + verify + ack)
-- [ ] Translate inbound Telegram payload → `gateway-core`'s expected input shape
-- [ ] Translate `gateway-core`'s reply → outbound Telegram send call
-- [ ] Wire in `sentinel-telegram-client` for actual send/receive/media
-- [ ] Import and call `sentinel-gateway-core` as a dependency
-- [ ] Confirm this repo contains _no_ menu/routing/session logic — only translation + wiring
-- [ ] Flag any place Telegram's payload/behavior forces a change to `gateway-core`'s contract (this is the real test of whether the contract is actually channel-agnostic)
+- [x] Webhook endpoint (receive + verify + ack)
+- [x] Translate inbound Telegram payload → `gateway-core`'s expected input shape
+- [x] Translate `gateway-core`'s reply → outbound Telegram send call
+- [x] Wire in `sentinel-telegram-client` for actual send/receive/media
+- [x] Import and call `sentinel-gateway-core` as a dependency
+- [x] Confirm this repo contains _no_ menu/routing/session logic — only translation + wiring
+- [x] Flag any place Telegram's payload/behavior forces a change to `gateway-core`'s contract → **No changes needed; contract held across both channels**
 
 ---
 

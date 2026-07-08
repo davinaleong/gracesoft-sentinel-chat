@@ -159,3 +159,30 @@
 - Zero menu / routing / session logic — all delegated to `gateway-core`.
 
 ---
+
+## M2c — `sentinel-gateway-telegram`
+
+**Date:** 2026-07-08
+**Status:** ✅ Complete
+
+### Deliverables
+
+| File | Purpose |
+|---|---|
+| `packages/gateway-telegram/src/config.ts` | Reads and validates `TELEGRAM_BOT_TOKEN`, `TELEGRAM_WEBHOOK_SECRET` |
+| `packages/gateway-telegram/src/webhookRouter.ts` | POST /webhook — verify secret token → normalize → resolve media → dispatch → sendText |
+| `packages/gateway-telegram/src/app.ts` | Express app factory |
+| `packages/gateway-telegram/src/index.ts` | Entry point (app registration placeholder) |
+| `packages/gateway-telegram/.env.example` | Env var documentation |
+
+### Contract compatibility findings
+
+No changes to `gateway-core`'s contract were required. The channel adapter contract held across both channels:
+
+| Difference | Resolution |
+|---|---|
+| Telegram uses `X-Telegram-Bot-Api-Secret-Token` (not HMAC) | Handled in channel shell — no gateway-core impact |
+| Telegram `chat_id` is a number, not a phone number string | Shell extracts it from `"telegram:<id>"` — no gateway-core impact |
+| Telegram `getFileUrl()` returns only `url` (no `mimeType`) | `mimeType` forwarded from `rawMedia.mimeType` set during normalisation |
+
+---
