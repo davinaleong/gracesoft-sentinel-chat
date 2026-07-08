@@ -1,0 +1,19 @@
+{
+  "name": "@sentinel/telegram-client",
+  "version": "0.1.0",
+  "description": "Telegram Bot API client: verify webhook, send/receive messages, download media",
+  "main": "dist/index.js",
+  "types": "dist/index.d.ts",
+  "files": ["dist"],
+  "scripts": {
+    "build": "tsc",
+    "clean": "rimraf dist",
+    "test": "jest"
+  },
+  "dependencies": {
+    "axios": "^1.6.8"
+  },
+  "devDependencies": {
+    "@types/axios": "*"
+  }
+}

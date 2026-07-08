@@ -1,0 +1,18 @@
+{
+  "name": "@sentinel/concierge",
+  "version": "0.1.0",
+  "description": "Concierge app: FAQ + Google Calendar booking flow",
+  "main": "dist/index.js",
+  "types": "dist/index.d.ts",
+  "files": ["dist"],
+  "scripts": {
+    "build": "tsc",
+    "clean": "rimraf dist",
+    "test": "jest"
+  },
+  "dependencies": {
+    "@sentinel/gateway-core": "*",
+    "googleapis": "^140.0.0"
+  },
+  "devDependencies": {}
+}

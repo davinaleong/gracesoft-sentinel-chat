@@ -1,0 +1,15 @@
+{
+  "name": "@sentinel/gateway-core",
+  "version": "0.1.0",
+  "description": "Channel-agnostic gateway: numeric menu, session state, routing, FAQ dispatch",
+  "main": "dist/index.js",
+  "types": "dist/index.d.ts",
+  "files": ["dist"],
+  "scripts": {
+    "build": "tsc",
+    "clean": "rimraf dist",
+    "test": "jest"
+  },
+  "dependencies": {},
+  "devDependencies": {}
+}

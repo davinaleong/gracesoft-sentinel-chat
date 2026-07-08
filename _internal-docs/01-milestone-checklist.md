@@ -1,7 +1,7 @@
 # GraceSoft Sentinel — Milestone Checklist
 
 **Project:** Multi-app WhatsApp + Telegram showpiece (Concierge + Cook) behind a shared gateway core
-**Status:** Planning — no code written yet
+**Status:** In Progress — M0 complete
 **Scope:** Fresh build, channel-agnostic module contract, two channel shells (WhatsApp, Telegram)
 
 ---
@@ -20,17 +20,17 @@
 
 ## M0 — Contracts & Conventions (build this first, before any app logic)
 
-- [ ] Finalize `handle(input)` contract (text/media/session in → reply/session/status out)
-- [ ] Finalize `tryFaq(text)` contract (returns `{ text }` or `null`)
-- [ ] Finalize FAQ data shape: `{ keywords: string[], answer: string }[]`
-- [ ] Finalize session state shape: `{ [userId]: { activeApp, appSession } }` (userId = channel-qualified, e.g. `whatsapp:6591234567` / `telegram:123456789`, so the two channels can't collide)
-- [ ] Decide: is "menu"/"0" a global interrupt at any point, or only when `status: "done"`?
-- [ ] Decide: does Cook require menu selection first, or auto-route on cold photo send?
-- [ ] Confirm repo/package naming convention across all repos
-- [ ] Define the **channel adapter contract**: what `gateway-core` expects in (`{ from, text?, media? }`) and returns out (`{ to, reply }`) — same shape regardless of channel
-- [ ] Define what stays channel-specific vs. core: webhook verification, payload parsing, and send-message calls live in the channel shell; menu, routing, session, FAQ dispatch live in `gateway-core`
-- [ ] Note: building both WhatsApp and Telegram shells against `gateway-core` from the start means the contract gets validated against two consumers immediately, rather than being a guess
-- [ ] Write a one-page `CONTRACT.md` documenting all of the above, shared as reference across repos
+- [x] Finalize `handle(input)` contract (text/media/session in → reply/session/status out)
+- [x] Finalize `tryFaq(text)` contract (returns `{ text }` or `null`)
+- [x] Finalize FAQ data shape: `{ keywords: string[], answer: string }[]`
+- [x] Finalize session state shape: `{ [userId]: { activeApp, appSession } }` (userId = channel-qualified, e.g. `whatsapp:6591234567` / `telegram:123456789`, so the two channels can't collide)
+- [x] Decide: is "menu"/"0" a global interrupt at any point, or only when `status: "done"`? → **Global interrupt at any point**
+- [x] Decide: does Cook require menu selection first, or auto-route on cold photo send? → **Auto-route on cold photo send**
+- [x] Confirm repo/package naming convention across all repos → **`@sentinel/<name>` scoped npm packages**
+- [x] Define the **channel adapter contract**: what `gateway-core` expects in (`{ from, text?, media? }`) and returns out (`{ to, reply }`) — same shape regardless of channel
+- [x] Define what stays channel-specific vs. core: webhook verification, payload parsing, and send-message calls live in the channel shell; menu, routing, session, FAQ dispatch live in `gateway-core`
+- [x] Note: building both WhatsApp and Telegram shells against `gateway-core` from the start means the contract gets validated against two consumers immediately, rather than being a guess
+- [x] Write a one-page `CONTRACT.md` documenting all of the above, shared as reference across repos
 
 ---
 

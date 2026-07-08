@@ -1,0 +1,18 @@
+{
+  "name": "@sentinel/cook",
+  "version": "0.1.0",
+  "description": "Cook app: dish photo → recipe + nutritional info via OpenAI gpt-4o",
+  "main": "dist/index.js",
+  "types": "dist/index.d.ts",
+  "files": ["dist"],
+  "scripts": {
+    "build": "tsc",
+    "clean": "rimraf dist",
+    "test": "jest"
+  },
+  "dependencies": {
+    "@sentinel/gateway-core": "*",
+    "openai": "^4.47.1"
+  },
+  "devDependencies": {}
+}
