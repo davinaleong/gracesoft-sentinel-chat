@@ -167,22 +167,60 @@
 
 ### Deliverables
 
-| File | Purpose |
-|---|---|
-| `packages/gateway-telegram/src/config.ts` | Reads and validates `TELEGRAM_BOT_TOKEN`, `TELEGRAM_WEBHOOK_SECRET` |
+| File                                             | Purpose                                                                               |
+| ------------------------------------------------ | ------------------------------------------------------------------------------------- |
+| `packages/gateway-telegram/src/config.ts`        | Reads and validates `TELEGRAM_BOT_TOKEN`, `TELEGRAM_WEBHOOK_SECRET`                   |
 | `packages/gateway-telegram/src/webhookRouter.ts` | POST /webhook — verify secret token → normalize → resolve media → dispatch → sendText |
-| `packages/gateway-telegram/src/app.ts` | Express app factory |
-| `packages/gateway-telegram/src/index.ts` | Entry point (app registration placeholder) |
-| `packages/gateway-telegram/.env.example` | Env var documentation |
+| `packages/gateway-telegram/src/app.ts`           | Express app factory                                                                   |
+| `packages/gateway-telegram/src/index.ts`         | Entry point (app registration placeholder)                                            |
+| `packages/gateway-telegram/.env.example`         | Env var documentation                                                                 |
 
 ### Contract compatibility findings
 
 No changes to `gateway-core`'s contract were required. The channel adapter contract held across both channels:
 
-| Difference | Resolution |
-|---|---|
-| Telegram uses `X-Telegram-Bot-Api-Secret-Token` (not HMAC) | Handled in channel shell — no gateway-core impact |
-| Telegram `chat_id` is a number, not a phone number string | Shell extracts it from `"telegram:<id>"` — no gateway-core impact |
+| Difference                                                 | Resolution                                                             |
+| ---------------------------------------------------------- | ---------------------------------------------------------------------- |
+| Telegram uses `X-Telegram-Bot-Api-Secret-Token` (not HMAC) | Handled in channel shell — no gateway-core impact                      |
+| Telegram `chat_id` is a number, not a phone number string  | Shell extracts it from `"telegram:<id>"` — no gateway-core impact      |
 | Telegram `getFileUrl()` returns only `url` (no `mimeType`) | `mimeType` forwarded from `rawMedia.mimeType` set during normalisation |
+
+---
+
+## M3 — `sentinel-concierge`
+
+**Date:** 2026-07-08
+**Status:** ✅ Complete
+
+### Deliverables
+
+| File | Purpose |
+|---|---|
+| `packages/concierge/src/types.ts` | `ConciergeSession` — multi-turn state shape |
+| `packages/concierge/src/faq.ts` | Concierge FAQ entries + `tryConciergeFaq()` |
+| `packages/concierge/src/holidays.ts` | Singapore public holidays 2025–2026 + `isPublicHoliday()`, `isWeekend()` |
+| `packages/concierge/src/calendar.ts` | Google Calendar integration — `getAvailableSlots()`, `createBooking()` |
+| `packages/concierge/src/dateParser.ts` | `parseDate()` — handles "tomorrow", "next Monday", "15 July", "YYYY-MM-DD", etc. |
+| `packages/concierge/src/flow.ts` | `handleConcierge()` — 3-step booking flow (date → time → confirm) |
+| `packages/concierge/src/config.ts` | Reads `GOOGLE_SERVICE_ACCOUNT_EMAIL`, `GOOGLE_SERVICE_ACCOUNT_PRIVATE_KEY`, `GOOGLE_CALENDAR_ID` |
+| `packages/concierge/src/index.ts` | `AppModule<ConciergeSession>` default export |
+| `packages/concierge/.env.example` | Google Calendar env var documentation |
+
+### Booking flow (3 turns)
+
+```
+turn 1: session=null → INTRO + step="awaiting_date"
+turn 2: text=date   → validate → getAvailableSlots() → list slots + step="awaiting_time"
+turn 3: text=number → confirm prompt + step="confirming"
+turn 4: text="yes"  → createBooking() → confirmation + status="done"
+```
+
+### Required env vars
+
+| Variable | Purpose |
+|---|---|
+| `GOOGLE_SERVICE_ACCOUNT_EMAIL` | Service account for Calendar API auth |
+| `GOOGLE_SERVICE_ACCOUNT_PRIVATE_KEY` | Service account private key (PEM) |
+| `GOOGLE_CALENDAR_ID` | Calendar to check/write bookings |
 
 ---

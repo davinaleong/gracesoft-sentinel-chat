@@ -94,14 +94,14 @@
 
 ## M3 — `sentinel-concierge`
 
-- [ ] Define Concierge FAQ content (keywords + answers)
-- [ ] Google Calendar integration (read availability)
-- [ ] Booking flow (multi-turn: date → time → confirm)
-- [ ] Public-holiday awareness (reuse logic from earlier prototype, rebuilt fresh)
-- [ ] Implement `handle()` per M0 contract
-- [ ] Implement `tryFaq()` per M0 contract
-- [ ] Session shape for mid-booking state (must tolerate abandonment via menu escape)
-- [ ] Package as installable module
+- [x] Define Concierge FAQ content (keywords + answers)
+- [x] Google Calendar integration (read availability)
+- [x] Booking flow (multi-turn: date → time → confirm)
+- [x] Public-holiday awareness (reuse logic from earlier prototype, rebuilt fresh)
+- [x] Implement `handle()` per M0 contract
+- [x] Implement `tryFaq()` per M0 contract
+- [x] Session shape for mid-booking state (must tolerate abandonment via menu escape)
+- [x] Package as installable module
 
 ---
 
