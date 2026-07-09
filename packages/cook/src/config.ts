@@ -1,4 +1,5 @@
 import * as dotenv from "dotenv";
+import type { AiProvider } from "@sentinel/ai-provider";
 dotenv.config();
 
 function required(name: string): string {
@@ -7,6 +8,24 @@ function required(name: string): string {
   return value;
 }
 
+function optional(name: string, fallback: string): string {
+  return process.env[name] ?? fallback;
+}
+
+const PROVIDER_DEFAULTS: Record<AiProvider, string> = {
+  openai: "gpt-4o",
+  anthropic: "claude-opus-4-5",
+};
+
+const AI_KEY_ENV: Record<AiProvider, string> = {
+  openai: "OPENAI_API_KEY",
+  anthropic: "ANTHROPIC_API_KEY",
+};
+
+const provider = optional("COOK_AI_PROVIDER", "openai") as AiProvider;
+
 export const cookConfig = {
-  openaiApiKey: required("OPENAI_API_KEY"),
+  aiProvider: provider,
+  aiApiKey: required(AI_KEY_ENV[provider]),
+  aiModel: optional("COOK_AI_MODEL", PROVIDER_DEFAULTS[provider]),
 };

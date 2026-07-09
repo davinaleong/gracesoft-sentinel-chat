@@ -1,5 +1,6 @@
-import OpenAI from "openai";
+import type { AiClient } from "@sentinel/ai-provider";
 
+/** Structured result returned by the dish-analysis AI call */
 export interface DishAnalysis {
   dishName: string | null;
   servings: number;
@@ -33,39 +34,27 @@ const SYSTEM_PROMPT = `You are a culinary AI assistant. When given a food photo,
 Keep steps concise (max 8 steps). Nutrition values are approximate per serving.`;
 
 /**
- * Analyses a dish photo URL using OpenAI gpt-4o vision and returns structured data.
+ * Analyses a dish photo URL and returns structured data.
+ * All AI interaction is self-contained here — prompts, message construction,
+ * and response parsing stay within this module.
  */
 export async function analyzeDish(
   imageUrl: string,
-  apiKey: string
+  client: AiClient
 ): Promise<DishAnalysis> {
-  const client = new OpenAI({ apiKey });
-
-  const response = await client.chat.completions.create({
-    model: "gpt-4o",
-    response_format: { type: "json_object" },
-    messages: [
-      {
-        role: "system",
-        content: SYSTEM_PROMPT,
-      },
+  const raw = await client.chat(
+    [
+      { role: "system", content: SYSTEM_PROMPT },
       {
         role: "user",
         content: [
-          {
-            type: "image_url",
-            image_url: { url: imageUrl, detail: "low" },
-          },
-          {
-            type: "text",
-            text: "Identify this dish and provide recipe + nutritional info.",
-          },
+          { type: "image_url", image_url: { url: imageUrl, detail: "low" } },
+          { type: "text", text: "Identify this dish and provide recipe + nutritional info." },
         ],
       },
     ],
-    max_tokens: 1200,
-  });
+    { maxTokens: 1200, jsonOutput: true }
+  );
 
-  const raw = response.choices[0]?.message?.content ?? "{}";
   return JSON.parse(raw) as DishAnalysis;
 }

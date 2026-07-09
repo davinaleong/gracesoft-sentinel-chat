@@ -1,6 +1,7 @@
 import type { AppInput, AppOutput } from "@sentinel/gateway-core";
+import type { AiClient } from "@sentinel/ai-provider";
 import type { CookSession } from "./types";
-import { analyzeDish } from "./openai";
+import { analyzeDish } from "./ai";
 import { formatDishAnalysis } from "./formatter";
 
 const PROMPT_FOR_PHOTO =
@@ -15,18 +16,18 @@ const THINKING = `🔍 Analysing your dish... this may take a moment.`;
 
 export async function handleCook(
   input: AppInput<CookSession>,
-  apiKey: string
+  client: AiClient
 ): Promise<AppOutput<CookSession>> {
   const { media, session } = input;
 
   // ── First call with a photo (cold auto-route) ──────────────────────────
   if (media?.type === "image") {
     try {
-      const analysis = await analyzeDish(media.url, apiKey);
+      const analysis = await analyzeDish(media.url, client);
       const reply = formatDishAnalysis(analysis);
       return { reply, session: null, status: "done" };
     } catch (err) {
-      console.error("[cook] OpenAI analysis failed:", err);
+      console.error("[cook] AI analysis failed:", err);
       return {
         reply:
           `😕 Sorry, I couldn't analyse that photo right now. ` +

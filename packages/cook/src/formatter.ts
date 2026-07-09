@@ -1,4 +1,4 @@
-import type { DishAnalysis } from "./openai";
+import type { DishAnalysis } from "./ai";
 
 /**
  * Formats a DishAnalysis result into WhatsApp/Telegram-friendly text.

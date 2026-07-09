@@ -11,8 +11,8 @@
     "test": "jest"
   },
   "dependencies": {
-    "@sentinel/gateway-core": "*",
-    "openai": "^4.47.1"
+    "@sentinel/ai-provider": "*",
+    "@sentinel/gateway-core": "*"
   },
   "devDependencies": {}
 }
