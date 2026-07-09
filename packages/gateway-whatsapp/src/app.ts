@@ -3,6 +3,7 @@ import type { AppModule } from "@sentinel/gateway-core";
 import { createGateway } from "@sentinel/gateway-core";
 import { WhatsAppClient } from "@sentinel/whatsapp-client";
 import { createWebhookRouter } from "./webhookRouter";
+import legalRouter from "./legalRouter";
 import { config } from "./config";
 
 /**
@@ -21,6 +22,9 @@ export function createApp(apps: AppModule<any>[]) {
 
   // Health check
   app.get("/health", (_req, res) => res.json({ status: "ok" }));
+
+  // Legal pages
+  app.use(legalRouter);
 
   // Webhook routes (raw body parsing is handled inside the router)
   app.use(

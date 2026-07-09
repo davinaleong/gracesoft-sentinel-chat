@@ -56,7 +56,8 @@ export function createWebhookRouter(
 
         const event = normalizeWebhookEvent(payload);
         if (!event) {
-          log.info("Ignoring non-message webhook event");
+          const hasStatuses = !!payload?.entry?.[0]?.changes?.[0]?.value?.statuses?.length;
+          log.info(hasStatuses ? "Ignoring status update (delivered/read receipt)" : "Ignoring non-message webhook event");
           return;
         }
 
