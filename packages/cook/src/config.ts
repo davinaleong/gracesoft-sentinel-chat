@@ -1,6 +1,7 @@
 import * as dotenv from "dotenv";
+import { resolve } from "path";
 import type { AiProvider } from "@sentinel/ai-provider";
-dotenv.config();
+dotenv.config({ path: resolve(__dirname, "../../../.env") });
 
 function required(name: string): string {
   const value = process.env[name];
