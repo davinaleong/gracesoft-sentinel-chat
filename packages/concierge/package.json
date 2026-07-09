@@ -11,7 +11,7 @@
     "test": "jest"
   },
   "dependencies": {
-    "@sentinel/gateway-core": "*",
+    "@sentinel/gateway-core": "workspace:*",
     "googleapis": "^140.0.0"
   },
   "devDependencies": {}

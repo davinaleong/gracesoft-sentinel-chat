@@ -11,8 +11,8 @@
     "test": "jest"
   },
   "dependencies": {
-    "@sentinel/ai-provider": "*",
-    "@sentinel/gateway-core": "*"
+    "@sentinel/ai-provider": "workspace:*",
+    "@sentinel/gateway-core": "workspace:*"
   },
   "devDependencies": {}
 }

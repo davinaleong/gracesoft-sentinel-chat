@@ -13,8 +13,8 @@
     "test": "jest"
   },
   "dependencies": {
-    "@sentinel/gateway-core": "*",
-    "@sentinel/telegram-client": "*",
+    "@sentinel/gateway-core": "workspace:*",
+    "@sentinel/telegram-client": "workspace:*",
     "dotenv": "^16.4.5",
     "express": "^4.19.2"
   },

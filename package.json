@@ -8,7 +8,8 @@
   "scripts": {
     "build": "npm run build --workspaces --if-present",
     "test": "npm run test --workspaces --if-present",
-    "clean": "npm run clean --workspaces --if-present"
+    "clean": "npm run clean --workspaces --if-present",
+    "dev": "pnpm --filter @sentinel/gateway-whatsapp run dev"
   },
   "devDependencies": {
     "@types/jest": "^29.5.12",
