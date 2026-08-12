@@ -90,6 +90,13 @@ importers:
   packages/config-tsconfig: {}
 
   packages/core:
+    dependencies:
+      vitest:
+        specifier: ^3.0.4
+        version: 3.2.7
+      zod:
+        specifier: ^3.24.1
+        version: 3.25.76
     devDependencies:
       '@gracesoft-sentinel/config-tsconfig':
         specifier: workspace:*
@@ -97,9 +104,6 @@ importers:
       typescript:
         specifier: ^5.7.3
         version: 5.9.3
-      vitest:
-        specifier: ^3.0.4
-        version: 3.2.7
 
   packages/provider-ai-openai:
     devDependencies:
@@ -1577,6 +1581,9 @@ packages:
     resolution: {integrity: sha512-rVksvsnNCdJ/ohGc6xgPwyN8eheCxsiLM8mxuE/t/mOVqJewPuO1miLpTHQiRgTKCLexL4MeAFVagts7HmNZ2Q==}
     engines: {node: '>=10'}
 
+  zod@3.25.76:
+    resolution: {integrity: sha512-gzUt/qt81nXsFGKIFcC3YnfEAx5NkunCfnDlvuBSSFS02bcXu4Lmea0AFIUwbLWxWPx3d9p8S5QoaujKcNQxcQ==}
+
 snapshots:
 
   '@babel/runtime@7.29.7': {}
@@ -2972,3 +2979,5 @@ snapshots:
   word-wrap@1.2.5: {}
 
   yocto-queue@0.1.0: {}
+
+  zod@3.25.76: {}

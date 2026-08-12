@@ -51,14 +51,14 @@ Define the channel-agnostic, provider-agnostic contracts every other package wil
 * `BusinessConfig` contract (FAQ blueprint path, office hours, timezone, calendar id — one config shape both agents can consume)
 
 ### Checklist
-* [ ] Define and document `NormalizedMessage` / `NormalizedResponse`
-* [ ] Define `ChannelAdapter` interface + shared contract test suite (any implementation must pass it)
-* [ ] Define `AIProvider` interface + shared contract test suite
-* [ ] Define `CalendarProvider` interface + shared contract test suite
-* [ ] Define `ConversationState` contract (used by Redis session store)
-* [ ] Define `BusinessConfig` contract
-* [ ] Zod schemas for all of the above (runtime validation, not just compile-time types)
-* [ ] Publish package internally, tag `v0.1.0` via Changesets
+* [x] Define and document `NormalizedMessage` / `NormalizedResponse`
+* [x] Define `ChannelAdapter` interface + shared contract test suite (any implementation must pass it)
+* [x] Define `AIProvider` interface + shared contract test suite
+* [x] Define `CalendarProvider` interface + shared contract test suite
+* [x] Define `ConversationState` contract (used by Redis session store)
+* [x] Define `BusinessConfig` contract
+* [x] Zod schemas for all of the above (runtime validation, not just compile-time types)
+* [x] Publish package internally, tag `v0.1.0` via Changesets — no npm registry configured yet (private monorepo), so interpreted as: CHANGELOG cut + git tag `@gracesoft-sentinel/core@0.1.0`
 
 ---
 
