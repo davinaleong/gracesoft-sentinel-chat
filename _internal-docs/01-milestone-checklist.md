@@ -24,15 +24,15 @@ Stand up the workspace scaffold and the tooling that enforces "independent repo"
 * Empty package skeletons created with correct naming: `core`, `agent-concierge`, `agent-cook`, `channel-whatsapp`, `channel-telegram`, `provider-ai-openai`, `provider-calendar-google`, `provider-drive-google`
 
 ### Checklist
-* [ ] Decide package manager (pnpm recommended) and confirm
-* [ ] Initialise pnpm workspace + root scripts (`build`, `test`, `lint` fan out per package)
-* [ ] Create `@gracesoft-sentinel/config-tsconfig` and `@gracesoft-sentinel/config-eslint` packages
-* [ ] Add dependency-cruiser (or equivalent) rule: packages may only import another package's `index.ts` public export, never internals
-* [ ] Add CI check that fails on boundary violations
-* [ ] Set up Changesets for independent semver per package
-* [ ] (Optional) Add Turborepo/Nx for cached, graph-aware builds
-* [ ] Scaffold empty packages with `package.json` + `exports` field for each of the 8 packages above
-* [ ] Confirm each empty package builds/tests in isolation (`cd packages/x && pnpm test`)
+* [x] Decide package manager (pnpm recommended) and confirm
+* [x] Initialise pnpm workspace + root scripts (`build`, `test`, `lint` fan out per package)
+* [x] Create `@gracesoft-sentinel/config-tsconfig` and `@gracesoft-sentinel/config-eslint` packages
+* [x] Add dependency-cruiser (or equivalent) rule: packages may only import another package's `index.ts` public export, never internals
+* [x] Add CI check that fails on boundary violations
+* [x] Set up Changesets for independent semver per package
+* [ ] (Optional) Add Turborepo/Nx for cached, graph-aware builds — skipped, revisit if build times warrant it
+* [x] Scaffold empty packages with `package.json` + `exports` field for each of the 8 packages above
+* [x] Confirm each empty package builds/tests in isolation (`cd packages/x && pnpm test`)
 
 ---
 

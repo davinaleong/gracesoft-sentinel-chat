@@ -1,0 +1,13 @@
+{
+  "files": [],
+  "references": [
+    { "path": "packages/core" },
+    { "path": "packages/agent-concierge" },
+    { "path": "packages/agent-cook" },
+    { "path": "packages/channel-whatsapp" },
+    { "path": "packages/channel-telegram" },
+    { "path": "packages/provider-ai-openai" },
+    { "path": "packages/provider-calendar-google" },
+    { "path": "packages/provider-drive-google" }
+  ]
+}
