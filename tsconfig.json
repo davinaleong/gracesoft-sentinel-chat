@@ -10,6 +10,8 @@
     { "path": "packages/provider-calendar-google" },
     { "path": "packages/provider-drive-google" },
     { "path": "packages/provider-session-redis" },
-    { "path": "packages/logging-postgres" }
+    { "path": "packages/logging-postgres" },
+    { "path": "packages/legal-concierge" },
+    { "path": "packages/legal-cook" }
   ]
 }

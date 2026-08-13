@@ -4,6 +4,30 @@ Companion to `01-milestone-checklist.md`. One entry per work session, newest fir
 
 ---
 
+## 2026-08-13 — Milestone 9 (partial): Legal & Compliance content packages
+
+**Status:** Partial — content and packages done, `apps/legal-site` (the serving layer) not started, and everything requiring a live deployment or a real account is necessarily out of reach here. Stopped mid-milestone at the user's request to document and commit before continuing.
+
+**What was built:**
+- `packages/legal-concierge` and `packages/legal-cook` — each has `content/privacy-policy.md` + `content/terms.md` (real markdown, not placeholder lorem ipsum) and `src/legal-content.ts` (`loadPrivacyPolicy()`/`loadTerms()`), which parses effective date and version **out of the markdown itself** (`**Effective date:**`/`**Version:**` lines) rather than duplicating them as separate constants — so the rendered metadata can't drift from the document's own header.
+- Content covers what Milestone 1's test-checklist §5 PDPA section asks for: what's collected (phone/chat id, message text, booking data for Concierge; phone/chat id, message text, **photos** for Cook), purpose, retention, and a contact method (`hello@gracesoft.dev` / `gracesoft.dev/contact` — both real, sourced from the FAQ blueprint already in `_internal-docs/data/`). Concierge's policy explicitly documents the AI-disclosure behavior already implemented in `agent-concierge/handle-message.ts`; Cook's explicitly states photos are processed and discarded, never stored — which matches what `channel-whatsapp`/`channel-telegram`'s media handling actually does (inlined as a `data:` URI in-memory, never written to Postgres — only a `[photo]` placeholder is logged).
+- **Every content file is marked as a DRAFT** (an HTML comment at the top of each `.md`, plus called out here): this is scaffolding — real, usable content, but not something to submit to WhatsApp Business verification or treat as the business's binding legal terms without a qualified-counsel review first. I'm not a lawyer and won't represent AI-drafted policy text as legally sufficient on its own.
+- `legal-content.test.ts` in each package: automated keyword-presence checks for the PDPA notice elements (data collected, purpose, retention, contact) plus effective-date/version parsing. This satisfies the *automatable* part of test-checklist §5's PDPA section; the section's own heading calls the full check "manual review, not automatable," which still stands.
+
+**Verified locally (all green):** `pnpm lint`, `pnpm typecheck`, `pnpm boundaries`, `pnpm test` (16 new tests, 272 total workspace-wide), `pnpm build`.
+
+**What's NOT done, and why:**
+- `apps/legal-site` — the thin Express app that would actually serve these at `/concierge/privacy` etc. — was not started. This is genuinely still buildable without external accounts (same pattern as `concierge-service`/`cook-service`'s `server.ts`), just not reached yet.
+- Deploying `legal-site` to a subdomain, submitting the URL to WhatsApp Business verification, and linking it from a Telegram bot's bio all require things I don't have: a live hosting target, a real WhatsApp Business account, and a real Telegram bot. These are flagged in the milestone checklist as needing the user.
+
+**Deferred to the user:**
+- Qualified legal review of the drafted Privacy Policy/T&C content before it's used for real (see the DRAFT markers).
+- Everything listed under "what's NOT done" above.
+
+**Next:** finish Milestone 9 (`apps/legal-site`), then Milestone 10 — Hardening & Production Readiness.
+
+---
+
 ## 2026-08-13 — Milestone 8: Service Wiring (`concierge-service`, `cook-service`)
 
 **Status:** Complete (docker-compose is structurally correct but not run end-to-end — see below).

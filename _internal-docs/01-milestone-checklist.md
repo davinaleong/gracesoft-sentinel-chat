@@ -217,17 +217,17 @@ Give each agent (Concierge, Cook) its own publicly reachable Privacy Policy and 
 * Telegram bot bio/`/start` message linking to the relevant policy pages
 
 ### Checklist
-* [ ] Draft Concierge Privacy Policy (what's collected: phone number, message content, booking/calendar data; how it's used/stored/retained)
-* [ ] Draft Concierge Terms & Conditions
-* [ ] Draft Cook Privacy Policy (what's collected: phone number, uploaded photos, message content)
-* [ ] Draft Cook Terms & Conditions
-* [ ] Add effective-date/version field to each document
-* [ ] Scaffold `packages/legal-concierge` and `packages/legal-cook` content packages
-* [ ] Scaffold `apps/legal-site` and wire it to render both packages at their public routes
-* [ ] Deploy `legal-site` to its own subdomain, independent of `concierge-service` / `cook-service`
-* [ ] Submit Privacy Policy URL as part of WhatsApp Business verification/App Review for each agent
-* [ ] Add Privacy Policy link to Telegram bot bio / `/start` response for each agent
-* [ ] Confirm PDPA-required notice elements are present (what's collected, purpose, retention, contact for data requests)
+* [x] Draft Concierge Privacy Policy (what's collected: phone number, message content, booking/calendar data; how it's used/stored/retained)
+* [x] Draft Concierge Terms & Conditions
+* [x] Draft Cook Privacy Policy (what's collected: phone number, uploaded photos, message content)
+* [x] Draft Cook Terms & Conditions
+* [x] Add effective-date/version field to each document
+* [x] Scaffold `packages/legal-concierge` and `packages/legal-cook` content packages
+* [ ] Scaffold `apps/legal-site` and wire it to render both packages at their public routes — **not started**, see progress log
+* [ ] Deploy `legal-site` to its own subdomain, independent of `concierge-service` / `cook-service` — blocked on the above
+* [ ] Submit Privacy Policy URL as part of WhatsApp Business verification/App Review for each agent — blocked on a live deploy + a real WhatsApp Business account; needs the user
+* [ ] Add Privacy Policy link to Telegram bot bio / `/start` response for each agent — blocked on a live deploy + a real Telegram bot; needs the user
+* [x] Confirm PDPA-required notice elements are present (what's collected, purpose, retention, contact for data requests) — automated keyword checks in `legal-content.test.ts`; full legal sufficiency still needs human review (content is explicitly marked DRAFT)
 
 ---
 
