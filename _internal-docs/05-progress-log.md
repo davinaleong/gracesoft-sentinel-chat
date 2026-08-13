@@ -4,6 +4,29 @@ Companion to `01-milestone-checklist.md`. One entry per work session, newest fir
 
 ---
 
+## 2026-08-13 — Milestone 7: Telegram Channel (`channel-telegram`)
+
+**Status:** Complete.
+
+**Extraction source:** `../gracesoft-sentinel-whatsapp/packages/gateway-telegram` + `packages/telegram-client`. Smaller in scope than the WhatsApp equivalent and with the same gap: legacy never implemented `callback_query`/inline-keyboard handling anywhere — no evidence it was ever wired up in either package. So, as with WhatsApp, the interactive-reply support here is new capability built against `NormalizedResponse.quickReplies`, not a port of existing behavior.
+
+**What was built (deliberately mirrors `channel-whatsapp`'s shape for the two packages to read as obviously-parallel implementations of one contract):**
+- `telegram-adapter.ts` — `TelegramChannelAdapter implements ChannelAdapter`. `parseInbound` handles text, the largest photo size (Telegram sends multiple resolutions; legacy already picked the last/largest one, kept that), and — new — `callback_query` (→ `quickReplyId` from `callback_data`). `formatOutbound` renders `quickReplies` as a Telegram inline keyboard, one button per row via `reply_markup.inline_keyboard`. Unlike WhatsApp's hard 3-button cap forcing a list-vs-buttons branch, Telegram's inline keyboards don't have that constraint, so there's a single code path regardless of option count.
+- **Same media-security consideration as WhatsApp, different mechanism:** Telegram file URLs embed the bot token directly in the URL path (`.../file/bot<token>/<path>`), so unlike WhatsApp's URLs they're technically fetchable without a header — but handing that URL to a third-party `AIProvider` would leak the bot token to whatever server fetches it. `TelegramApiClient.downloadFileAsDataUri()` downloads and inlines as a `data:` URI for the same reason as `WhatsAppApiClient.downloadMediaAsDataUri()`, keeping the security posture consistent across channels rather than accidentally weaker on the "convenient" one.
+- `secret-token.ts` — `verifyTelegramSecretToken()`: unlike WhatsApp's HMAC-over-body signature, Telegram's webhook auth is a static shared-secret header (`X-Telegram-Bot-Api-Secret-Token`) set once via `setWebhook`'s `secret_token` param — simple `timingSafeEqual` string comparison, no HMAC needed.
+- `webhook-router.ts` — POST-only (Telegram has no GET handshake like Meta's `hub.challenge` — registration is a one-time API call, see below), same ack-then-process-async pattern and injected-`onMessage` design as `channel-whatsapp`'s router, for the same reason (agent wiring is Milestone 8's job).
+- `telegram-api-client.ts` — adds `setWebhook(url, secretToken)` (satisfies the "Set up Telegram bot + webhook registration" checklist item — the actual bot creation via @BotFather is an unavoidable manual/human step, not something this repo can do for the user) alongside `sendMessage`/`downloadFileAsDataUri`.
+
+**Cross-channel parity test — the actual point of this milestone:** added `tests/cross-channel-parity.test.ts` at the **repo root**, not inside `packages/`. Reason: `agent-concierge`, `channel-whatsapp`, and `channel-telegram` are each independently forbidden (by design and by the boundary-lint rule) from importing one another, but proving parity requires exactly that — driving the same scenario through both adapters and the same agent in one test. Added a `tests/` directory with its own `tsconfig.json`, plus root `test:integration`/`typecheck:integration`/`lint:integration` scripts (kept separate from the existing `pnpm test`/`typecheck`/`lint` fan-outs, which only touch `packages/*`), wired into `ci.yml` after the `build` step since these tests import built `dist/` output, not source. The test proves: (1) equivalent inbound text extracted from each channel's own wire format, (2) the same booking scenario run through `agent-concierge.handleMessage` produces byte-identical response text/quick-replies regardless of originating channel, (3) each adapter renders that shared response correctly in its own envelope (WhatsApp interactive buttons vs. Telegram inline keyboard) with matching ids/labels.
+
+**Verified locally (all green):** `pnpm typecheck`, `pnpm lint`, `pnpm boundaries` (0 violations), `pnpm build`, `pnpm test` — 25/25 new tests in `channel-telegram`, 175/175 workspace-wide across `packages/`, plus `pnpm typecheck:integration`/`lint:integration`/`test:integration` (3/3) for the root-level parity test. Zero live network calls anywhere.
+
+**Nothing deferred to the user for this milestone** beyond the inherent human step of registering a real bot with @BotFather — not something buildable in advance of an actual deployment (Milestone 8/10).
+
+**Next:** Milestone 8 — Service Wiring (`apps/concierge-service`, `apps/cook-service`).
+
+---
+
 ## 2026-08-13 — Milestone 6: WhatsApp Channel (`channel-whatsapp`)
 
 **Status:** Complete.

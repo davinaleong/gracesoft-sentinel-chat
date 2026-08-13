@@ -37,3 +37,12 @@ jobs:
 
       - name: Build
         run: pnpm build
+
+      - name: Lint (cross-package integration tests)
+        run: pnpm lint:integration
+
+      - name: Typecheck (cross-package integration tests)
+        run: pnpm typecheck:integration
+
+      - name: Integration tests (cross-package, e.g. cross-channel parity)
+        run: pnpm test:integration

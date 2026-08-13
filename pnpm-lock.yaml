@@ -11,9 +11,21 @@ importers:
       '@changesets/cli':
         specifier: ^2.27.11
         version: 2.31.1
+      '@gracesoft-sentinel/agent-concierge':
+        specifier: workspace:*
+        version: link:packages/agent-concierge
+      '@gracesoft-sentinel/channel-telegram':
+        specifier: workspace:*
+        version: link:packages/channel-telegram
+      '@gracesoft-sentinel/channel-whatsapp':
+        specifier: workspace:*
+        version: link:packages/channel-whatsapp
       '@gracesoft-sentinel/config-eslint':
         specifier: workspace:*
         version: link:packages/config-eslint
+      '@gracesoft-sentinel/core':
+        specifier: workspace:*
+        version: link:packages/core
       dependency-cruiser:
         specifier: ^16.9.0
         version: 16.10.4
@@ -63,10 +75,20 @@ importers:
         version: 3.2.7
 
   packages/channel-telegram:
+    dependencies:
+      '@gracesoft-sentinel/core':
+        specifier: workspace:*
+        version: link:../core
+      express:
+        specifier: ^4.19.2
+        version: 4.22.2
     devDependencies:
       '@gracesoft-sentinel/config-tsconfig':
         specifier: workspace:*
         version: link:../config-tsconfig
+      '@types/express':
+        specifier: ^4.17.21
+        version: 4.17.25
       typescript:
         specifier: ^5.7.3
         version: 5.9.3

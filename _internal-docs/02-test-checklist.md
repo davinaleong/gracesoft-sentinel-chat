@@ -52,7 +52,7 @@ These run against **every implementation** of a `core` interface, so behavior is
 * [x] `AIProvider` contract suite passes for any stub/second implementation added later
 * [x] `CalendarProvider` contract suite passes for `provider-calendar-google`
 * [x] `ChannelAdapter` contract suite passes for `channel-whatsapp`
-* [ ] `ChannelAdapter` contract suite passes for `channel-telegram`
+* [x] `ChannelAdapter` contract suite passes for `channel-telegram`
 
 ### Boundary enforcement
 * [ ] Static lint check: `agent-concierge` has zero imports from `channel-*` or `provider-*` packages
@@ -77,9 +77,9 @@ Real wiring, mocked external services where appropriate (mock WhatsApp/Telegram 
 * [x] WhatsApp inbound text message → correctly normalized → reaches agent *(via injected `onMessage` in `webhook-router.test.ts` — real `agent-concierge`/`agent-cook` wiring happens at Milestone 8)*
 * [x] WhatsApp inbound image → media downloaded → correctly normalized → reaches agent
 * [x] WhatsApp outbound response correctly formatted (including quick-reply/list for slot selection)
-* [ ] Telegram webhook/update → correctly normalized → reaches agent
-* [ ] Telegram outbound response correctly formatted (inline keyboard for slot selection)
-* [ ] **Cross-channel parity:** identical scenario run through WhatsApp adapter and Telegram adapter produces equivalent `NormalizedResponse` content from the agent
+* [x] Telegram webhook/update → correctly normalized → reaches agent *(via injected `onMessage` in `webhook-router.test.ts` — real agent wiring happens at Milestone 8)*
+* [x] Telegram outbound response correctly formatted (inline keyboard for slot selection)
+* [x] **Cross-channel parity:** identical scenario run through WhatsApp adapter and Telegram adapter produces equivalent `NormalizedResponse` content from the agent — `tests/cross-channel-parity.test.ts`
 
 ### Provider wiring
 * [ ] Mocked Calendar API returns "busy" for a slot → agent suggests 3 alternatives

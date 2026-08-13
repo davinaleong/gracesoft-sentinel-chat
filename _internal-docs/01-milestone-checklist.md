@@ -174,11 +174,11 @@ Add Telegram as a second channel implementing the same `ChannelAdapter` contract
 * `formatOutbound`: `NormalizedResponse` → Telegram message format (inline keyboards for slot selection)
 
 ### Checklist
-* [ ] Set up Telegram bot + webhook registration
-* [ ] Implement `parseInbound`
-* [ ] Implement `formatOutbound` (map WhatsApp-style quick replies → Telegram inline keyboards)
-* [ ] Run shared `ChannelAdapter` contract test suite against it
-* [ ] Cross-channel parity test: same scenario through WhatsApp and Telegram adapters produces equivalent `NormalizedResponse` content
+* [x] Set up Telegram bot + webhook registration — `TelegramApiClient.setWebhook()`; actual bot creation via BotFather is a manual step for whoever deploys (Milestone 8/10), not something buildable in-repo
+* [x] Implement `parseInbound`
+* [x] Implement `formatOutbound` (map WhatsApp-style quick replies → Telegram inline keyboards)
+* [x] Run shared `ChannelAdapter` contract test suite against it
+* [x] Cross-channel parity test: same scenario through WhatsApp and Telegram adapters produces equivalent `NormalizedResponse` content — `tests/cross-channel-parity.test.ts` at the repo root (see progress log for why it lives outside `packages/`)
 
 ---
 
