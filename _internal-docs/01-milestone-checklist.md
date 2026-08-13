@@ -195,12 +195,12 @@ Compose agent + channel(s) + provider(s) into deployable services, config-driven
 * Postgres logging/persistence
 
 ### Checklist
-* [ ] Build `concierge-service` composition root
-* [ ] Build `cook-service` composition root
-* [ ] Implement Redis-backed `ConversationState` store
-* [ ] Implement Postgres logging layer
-* [ ] Env validation via Zod for both services
-* [ ] Local docker-compose for Redis + Postgres + both services
+* [x] Build `concierge-service` composition root
+* [x] Build `cook-service` composition root
+* [x] Implement Redis-backed `ConversationState` store
+* [x] Implement Postgres logging layer
+* [x] Env validation via Zod for both services
+* [x] Local docker-compose for Redis + Postgres + both services
 
 ---
 

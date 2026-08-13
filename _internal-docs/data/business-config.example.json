@@ -1,0 +1,46 @@
+{
+  "businessId": "gracesoft",
+  "timezone": "Asia/Singapore",
+  "faqBlueprintPath": "./faq-blueprint.json",
+  "calendarId": "REPLACE_WITH_REAL_GOOGLE_CALENDAR_ID",
+  "businessHours": {
+    "timezone": "Asia/Singapore",
+    "weekly": {
+      "mon": { "open": "09:00", "close": "18:00" },
+      "tue": { "open": "09:00", "close": "18:00" },
+      "wed": { "open": "09:00", "close": "18:00" },
+      "thu": { "open": "09:00", "close": "18:00" },
+      "fri": { "open": "09:00", "close": "18:00" },
+      "sat": null,
+      "sun": null
+    },
+    "exceptions": [
+      { "date": "2026-01-01", "hours": null, "reason": "New Year's Day" },
+      { "date": "2026-02-17", "hours": null, "reason": "Chinese New Year" },
+      { "date": "2026-02-18", "hours": null, "reason": "Chinese New Year" },
+      { "date": "2026-03-21", "hours": null, "reason": "Hari Raya Puasa" },
+      { "date": "2026-04-03", "hours": null, "reason": "Good Friday" },
+      { "date": "2026-05-01", "hours": null, "reason": "Labour Day" },
+      { "date": "2026-05-27", "hours": null, "reason": "Hari Raya Haji" },
+      { "date": "2026-05-31", "hours": null, "reason": "Vesak Day" },
+      { "date": "2026-06-01", "hours": null, "reason": "Vesak Day (Observed)" },
+      { "date": "2026-08-09", "hours": null, "reason": "National Day" },
+      { "date": "2026-08-10", "hours": null, "reason": "National Day (Observed)" },
+      { "date": "2026-11-08", "hours": null, "reason": "Deepavali" },
+      { "date": "2026-11-09", "hours": null, "reason": "Deepavali (Observed)" },
+      { "date": "2026-12-25", "hours": null, "reason": "Christmas Day" },
+      { "date": "2027-01-01", "hours": null, "reason": "New Year's Day" },
+      { "date": "2027-02-06", "hours": null, "reason": "Chinese New Year" },
+      { "date": "2027-02-07", "hours": null, "reason": "Chinese New Year" },
+      { "date": "2027-02-08", "hours": null, "reason": "Chinese New Year (Observed)" },
+      { "date": "2027-03-10", "hours": null, "reason": "Hari Raya Puasa" },
+      { "date": "2027-03-26", "hours": null, "reason": "Good Friday" },
+      { "date": "2027-05-01", "hours": null, "reason": "Labour Day" },
+      { "date": "2027-05-17", "hours": null, "reason": "Hari Raya Haji" },
+      { "date": "2027-05-20", "hours": null, "reason": "Vesak Day" },
+      { "date": "2027-08-09", "hours": null, "reason": "National Day" },
+      { "date": "2027-10-28", "hours": null, "reason": "Deepavali" },
+      { "date": "2027-12-25", "hours": null, "reason": "Christmas Day" }
+    ]
+  }
+}

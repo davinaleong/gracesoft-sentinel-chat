@@ -1,0 +1,68 @@
+version: "3.9"
+
+# Local dev/staging composition — Redis + Postgres + both services. Both
+# services expect real OpenAI/Google/WhatsApp/Telegram credentials via
+# env files (see .env.example in each app); nothing here fabricates those.
+services:
+  redis:
+    image: redis:7-alpine
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis-data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 5
+
+  postgres:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_USER: gracesoft
+      POSTGRES_PASSWORD: gracesoft
+      POSTGRES_DB: gracesoft_sentinel
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres-data:/var/lib/postgresql/data
+      - ./packages/logging-postgres/schema.sql:/docker-entrypoint-initdb.d/01-schema.sql:ro
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U gracesoft"]
+      interval: 5s
+      timeout: 3s
+      retries: 5
+
+  concierge-service:
+    build:
+      context: .
+      dockerfile: apps/concierge-service/Dockerfile
+    env_file:
+      - apps/concierge-service/.env
+    ports:
+      - "3000:3000"
+    depends_on:
+      redis:
+        condition: service_healthy
+      postgres:
+        condition: service_healthy
+    volumes:
+      - ./_internal-docs/data:/app/_internal-docs/data:ro
+
+  cook-service:
+    build:
+      context: .
+      dockerfile: apps/cook-service/Dockerfile
+    env_file:
+      - apps/cook-service/.env
+    ports:
+      - "3001:3001"
+    depends_on:
+      redis:
+        condition: service_healthy
+      postgres:
+        condition: service_healthy
+
+volumes:
+  redis-data:
+  postgres-data:

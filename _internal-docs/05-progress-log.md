@@ -4,6 +4,40 @@ Companion to `01-milestone-checklist.md`. One entry per work session, newest fir
 
 ---
 
+## 2026-08-13 — Milestone 8: Service Wiring (`concierge-service`, `cook-service`)
+
+**Status:** Complete (docker-compose is structurally correct but not run end-to-end — see below).
+
+**New packages, beyond the two apps:**
+- **`@gracesoft-sentinel/core` gained a `SessionStore` interface** (+ `runSessionStoreContractTests`), mirroring `CalendarProvider`/`AIProvider` — `ConversationState` (the data shape) existed since Milestone 1, but nothing defined the swappable persistence interface around it. Went through the real Changesets flow this time (`.changeset/session-store-contract.md` → `pnpm changeset version`): core bumped `0.1.0` → `0.2.0` (minor), dependents patch-bumped automatically.
+- **`provider-session-redis`** — `RedisSessionStore implements SessionStore`, wrapping `ioredis` behind a minimal `RedisLikeClient` interface (same pattern as `provider-calendar-google`'s `GoogleCalendarClient`) so the contract suite runs against an in-memory fake, no real Redis needed.
+- **`logging-postgres`** — `ConversationLogger` (business-owned interface, not a `core` contract — logging is a service-layer concern the composition root performs around `handleMessage`, not something either agent takes as an input), `PostgresConversationLogger` implementing it via `pg`, plus `schema.sql` (two tables: `conversation_messages`, `bookings`). Deliberately logs `text`/`sessionId`/`channel`/`agent` only — never a channel's raw payload — so it's not storing more than the policy needs by construction; full PII redaction *within* logged text is Milestone 10's job.
+
+Both new packages follow the `createXFromEnv()` construction pattern established in Milestones 4/5.
+
+**The two composition roots (`apps/concierge-service`, `apps/cook-service`):** each has `env.ts` (Zod, fails fast with every invalid/missing var listed at once, not just the first), `on-message.ts` (the actual composition — session load/save, message logging, calls `handleMessage`, exported as a standalone factory so it's testable against fakes without a running server), `server.ts` (health/readiness + conditionally-mounted WhatsApp/Telegram routers), `composition.ts` (wires real providers from env), `index.ts` (entrypoint). `concierge-service` additionally has `business-config-loader.ts` (loads+validates a `BusinessConfig` JSON file via `BusinessConfigSchema.parse`, then the FAQ blueprint relative to it) and `logging-calendar-provider.ts` (`withBookingLogging`, a `CalendarProvider` decorator that logs a booking record after a successful `createBooking` — a decorator rather than baking logging into `GoogleCalendarProvider` itself, since booking records need the session id, which only the composition layer has in scope).
+
+**Real data put to use:** built `_internal-docs/data/business-config.example.json` from the actual GraceSoft FAQ blueprint and the real 2026+2027 Singapore public-holiday CSVs already sitting in that folder (26 dated exceptions, transcribed by hand from the CSVs — business hours themselves are a placeholder Mon-Fri 9-6 SGT since GraceSoft's real hours aren't published anywhere, per the FAQ blueprint's own `contact.business_hours` field). `composition.test.ts` loads this real file through the real loader and schema — proving it's genuinely valid, not just hand-typed and hoped-for.
+
+**Two bugs found and fixed along the way:**
+1. **Silent booking failures.** Writing the "Calendar API auth failure → graceful error handling" test (test-checklist §3) surfaced that `confirmBooking` in `agent-concierge/handle-message.ts` had no error handling around `calendarProvider.createBooking` at all — a failure would throw, propagate up through the service's `onMessage`, and since the channel webhook layer already sent its ack before processing, the chatter would get **no reply whatsoever**, not even an apology. Fixed by catching the error and returning "couldn't complete that booking, please try again" — logged in the test-checklist regression table.
+2. **A pre-existing, unrelated ESLint config bug.** `pnpm lint` failed on `channel-telegram`'s (and, on closer look, every package's) built `dist/**` output — the shared config's ignore patterns (`"dist/**"` etc.) only reliably excluded paths relative to the config file's own directory, not the cwd `eslint .` actually runs from per-package. Silent in CI (lint runs before build there) but broke local dev workflows where build happens first. Fixed by switching to `"**/dist/**"` etc. in `packages/config-eslint/index.js`.
+
+**Boundary rules extended to `apps/`:** `.dependency-cruiser.cjs` gained `no-channel-to-channel` (mirrors the existing cross-package-internals rule's structure — a same-package exclusion needs *both* the negative-lookahead in `to.path` *and* a matching `to.pathNot`, empirically; lookahead-only or pathNot-only each independently failed to exclude same-package edges) and `no-app-to-app`/`no-package-imports-app`. `boundaries` script scope extended from `packages` to `packages apps`. Both webhook routers (`channel-whatsapp`, `channel-telegram`) take `onMessage` as an injected callback rather than either app importing `agent-concierge`/`agent-cook` — composition happens entirely in each app's own `on-message.ts`/`composition.ts`, so `channel-*` and `agent-*` packages remain exactly as agent/channel-agnostic as they were before this milestone.
+
+**`docker-compose.yml`** — Redis + Postgres (with `schema.sql` mounted as init SQL) + both services, each built from its own `Dockerfile` (simple whole-workspace build, not yet size-optimized via `pnpm deploy`/multi-stage pruning — that's a Milestone 10 concern). **Not run end-to-end in this environment** — doing so needs real OpenAI/Google service-account credentials and either a WhatsApp Business or Telegram bot token, none of which exist here. What *is* verified: both Dockerfiles are structurally sound (same build shape already proven to typecheck/build via `pnpm build`), `docker-compose.yml` references real files (`schema.sql`, `.env.example`s) that exist, and every piece it wires together (`composition.ts` for both apps) is proven to construct cleanly via `composition.test.ts`.
+
+**Verified locally (all green):** `pnpm lint`, `pnpm typecheck`, `pnpm boundaries` (0 violations, 334 modules/692 dependencies), `pnpm test` (254/254 across the whole workspace), `pnpm build`, plus the root `test:integration`/`typecheck:integration`/`lint:integration` (3/3).
+
+**Deferred to the user:**
+- Real OpenAI API key, Google Cloud service-account credentials, and a WhatsApp Business or Telegram bot (or both) to actually run `docker-compose up` end-to-end.
+- `calendarId` in `business-config.example.json` is a placeholder (`REPLACE_WITH_REAL_GOOGLE_CALENDAR_ID`) — needs a real Google Calendar ID once one exists for the business.
+- The security flag from Milestone 5 (leaked GCP service-account key in the legacy repo) is still outstanding.
+
+**Next:** Milestone 9 — Legal & Compliance Pages.
+
+---
+
 ## 2026-08-13 — Milestone 7: Telegram Channel (`channel-telegram`)
 
 **Status:** Complete.

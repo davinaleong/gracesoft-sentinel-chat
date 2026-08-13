@@ -56,6 +56,9 @@ function offerSlotsResponse(
   };
 }
 
+const BOOKING_FAILED_MESSAGE =
+  "Sorry, I couldn't complete that booking right now — please try again in a moment, or let us know if it keeps happening.";
+
 async function confirmBooking(params: {
   calendarProvider: CalendarProvider;
   businessConfig: BusinessConfig;
@@ -64,14 +67,23 @@ async function confirmBooking(params: {
   end: string;
   state: ConversationState;
 }): Promise<ConciergeHandleMessageResult> {
-  const booking = await params.calendarProvider.createBooking({
-    calendarId: params.businessConfig.calendarId,
-    start: params.start,
-    end: params.end,
-    timezone: params.businessConfig.timezone,
-    summary: `Booking via ${params.message.channel}`,
-    attendee: { contact: params.message.senderId },
-  });
+  let booking;
+  try {
+    booking = await params.calendarProvider.createBooking({
+      calendarId: params.businessConfig.calendarId,
+      start: params.start,
+      end: params.end,
+      timezone: params.businessConfig.timezone,
+      summary: `Booking via ${params.message.channel}`,
+      attendee: { contact: params.message.senderId },
+    });
+  } catch (err) {
+    // A calendar API failure (auth, network, quota) must never surface as a
+    // silent failure — the ack already happened at the channel layer, so
+    // without this the chatter would simply get no response at all.
+    console.error("[agent-concierge] createBooking failed:", err);
+    return { response: { text: BOOKING_FAILED_MESSAGE }, state: withContext(params.state, {}) };
+  }
 
   const label = formatSlotLabel(booking.start, params.businessConfig.timezone);
   return {

@@ -1,5 +1,11 @@
 # @gracesoft-sentinel/core
 
+## 0.2.0
+
+### Minor Changes
+
+- Add `SessionStore` interface + shared contract test suite (`runSessionStoreContractTests`), the capability surface Milestone 8's Redis-backed session store implements. `ConversationState` (the data shape) already existed since Milestone 1; this adds the swappable persistence interface around it, mirroring `CalendarProvider`/`AIProvider`.
+
 ## 0.1.0
 
 Initial release. Defines the channel-agnostic, provider-agnostic contracts every other package in the monorepo implements or consumes:

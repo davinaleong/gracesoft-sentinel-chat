@@ -140,6 +140,23 @@ describe("handleMessage — date + time given", () => {
     );
   });
 
+  it("degrades gracefully, without a silent failure, when the calendar API errors on createBooking", async () => {
+    const calendarProvider = fullyAvailableCalendarProvider();
+    calendarProvider.createBooking = async () => {
+      throw new Error("calendar API auth failure");
+    };
+    const result = await handleMessage({
+      message: makeMessage({ text: "book for 4 May at 11am" }),
+      state: makeDisclosedState(),
+      businessConfig: TEST_BUSINESS_CONFIG,
+      calendarProvider,
+      aiProvider: fakeAiProviderAnswering("unused"),
+      faqBlueprint: TEST_FAQ_BLUEPRINT,
+      now: NOW,
+    });
+    expect(result.response.text).toMatch(/couldn't complete that booking/i);
+  });
+
   it("returns the next 3 available slots when the requested slot is unavailable", async () => {
     const requestedStart = dayjs.tz("2026-05-04 11:00", "Asia/Singapore");
     const calendarProvider = calendarWithBusyWindows([

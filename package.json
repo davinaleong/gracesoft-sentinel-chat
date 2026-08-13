@@ -16,7 +16,7 @@
     "lint:integration": "eslint tests",
     "typecheck": "pnpm -r --if-present run typecheck",
     "typecheck:integration": "tsc -p tests/tsconfig.json --noEmit",
-    "boundaries": "depcruise --config .dependency-cruiser.cjs packages",
+    "boundaries": "depcruise --config .dependency-cruiser.cjs packages apps",
     "changeset": "changeset",
     "version-packages": "changeset version",
     "release": "pnpm build && changeset publish"

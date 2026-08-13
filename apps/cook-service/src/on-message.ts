@@ -1,0 +1,61 @@
+import { handleMessage } from "@gracesoft-sentinel/agent-cook";
+import type { AIProvider, ConversationState, NormalizedMessage, NormalizedResponse, SessionStore } from "@gracesoft-sentinel/core";
+import type { ConversationLogger } from "@gracesoft-sentinel/logging-postgres";
+
+const DEFAULT_SESSION_TTL_SECONDS = 60 * 60; // 1h — Cook's flow is single-photo-in, single-recipe-out; short-lived by design
+
+export interface OnMessageDeps {
+  aiProvider: AIProvider;
+  sessionStore: SessionStore;
+  logger: ConversationLogger;
+  sessionTtlSeconds?: number;
+}
+
+function sessionIdFor(message: NormalizedMessage): string {
+  return `cook:${message.channel}:${message.senderId}`;
+}
+
+function freshState(sessionId: string, message: NormalizedMessage): ConversationState {
+  const now = new Date().toISOString();
+  return { sessionId, channel: message.channel, userId: message.senderId, agent: "cook", createdAt: now, updatedAt: now, context: {} };
+}
+
+async function logSafely(logger: ConversationLogger, entry: Parameters<ConversationLogger["logMessage"]>[0]): Promise<void> {
+  try {
+    await logger.logMessage(entry);
+  } catch (err) {
+    console.error("[cook-service] failed to log message:", err);
+  }
+}
+
+/** Builds the `onMessage` callback both channel webhook routers are given — see concierge-service's equivalent for the design rationale. */
+export function createOnMessageHandler(deps: OnMessageDeps): (message: NormalizedMessage) => Promise<NormalizedResponse> {
+  return async (message: NormalizedMessage): Promise<NormalizedResponse> => {
+    const sessionId = sessionIdFor(message);
+    const state = (await deps.sessionStore.get(sessionId)) ?? freshState(sessionId, message);
+
+    await logSafely(deps.logger, {
+      sessionId,
+      channel: message.channel,
+      agent: "cook",
+      direction: "inbound",
+      text: message.text ?? (message.media?.length ? "[photo]" : undefined),
+      occurredAt: message.timestamp,
+    });
+
+    const result = await handleMessage({ message, state, aiProvider: deps.aiProvider });
+
+    await deps.sessionStore.set(result.state, deps.sessionTtlSeconds ?? DEFAULT_SESSION_TTL_SECONDS);
+
+    await logSafely(deps.logger, {
+      sessionId,
+      channel: message.channel,
+      agent: "cook",
+      direction: "outbound",
+      text: result.response.text,
+      occurredAt: new Date().toISOString(),
+    });
+
+    return result.response;
+  };
+}

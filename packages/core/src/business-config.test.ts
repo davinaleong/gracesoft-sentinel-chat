@@ -24,4 +24,24 @@ describe("BusinessConfigSchema", () => {
     });
     expect(result.success).toBe(true);
   });
+
+  it("rejects a config missing required fields", () => {
+    const result = BusinessConfigSchema.safeParse({
+      businessId: "biz-1",
+      timezone: "Asia/Singapore",
+      // missing faqBlueprintPath, calendarId, businessHours
+    });
+    expect(result.success).toBe(false);
+  });
+
+  it("rejects a config with a malformed businessHours shape", () => {
+    const result = BusinessConfigSchema.safeParse({
+      businessId: "biz-1",
+      timezone: "Asia/Singapore",
+      faqBlueprintPath: "./blueprints/biz-1-faq.json",
+      calendarId: "biz-1-calendar",
+      businessHours: { timezone: "Asia/Singapore", weekly: "not-a-map", exceptions: [] },
+    });
+    expect(result.success).toBe(false);
+  });
 });

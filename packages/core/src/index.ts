@@ -6,3 +6,4 @@ export * from "./calendar-provider.js";
 export * from "./recipe-source-provider.js";
 export * from "./conversation-state.js";
 export * from "./business-config.js";
+export * from "./session-store.js";

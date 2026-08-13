@@ -27,6 +27,42 @@ module.exports = {
       },
     },
     {
+      name: "no-channel-to-channel",
+      comment: "channel-* packages must not import each other — each is an independent ChannelAdapter implementation.",
+      severity: "error",
+      from: {
+        path: "^packages/channel-([^/]+)/src",
+      },
+      to: {
+        path: "^packages/channel-(?!\\1)([^/]+)/src",
+        pathNot: "^packages/channel-\\1/src",
+      },
+    },
+    {
+      name: "no-package-imports-app",
+      comment:
+        "packages/* must never depend on apps/* — apps are composition roots (leaves) that wire packages together, not something packages should reach into.",
+      severity: "error",
+      from: {
+        path: "^packages/",
+      },
+      to: {
+        path: "^apps/",
+      },
+    },
+    {
+      name: "no-app-to-app",
+      comment: "apps/* are independent deployable services and must not import each other's internals.",
+      severity: "error",
+      from: {
+        path: "^apps/([^/]+)/src",
+      },
+      to: {
+        path: "^apps/(?!\\1)([^/]+)/src",
+        pathNot: "^apps/\\1/src",
+      },
+    },
+    {
       name: "no-orphans",
       comment: "Modules that no other module imports and that import nothing themselves are likely dead code.",
       severity: "warn",

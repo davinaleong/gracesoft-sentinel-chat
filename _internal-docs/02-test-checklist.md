@@ -62,9 +62,9 @@ These run against **every implementation** of a `core` interface, so behavior is
 * [ ] CI fails the build if any boundary check above fails
 
 ### Schema validation
-* [ ] Zod schema rejects malformed `NormalizedMessage`
-* [ ] Zod schema rejects malformed `BusinessConfig`
-* [ ] Env validation fails fast with a clear error on missing/invalid required vars
+* [x] Zod schema rejects malformed `NormalizedMessage`
+* [x] Zod schema rejects malformed `BusinessConfig`
+* [x] Env validation fails fast with a clear error on missing/invalid required vars
 
 ---
 
@@ -82,21 +82,21 @@ Real wiring, mocked external services where appropriate (mock WhatsApp/Telegram 
 * [x] **Cross-channel parity:** identical scenario run through WhatsApp adapter and Telegram adapter produces equivalent `NormalizedResponse` content from the agent — `tests/cross-channel-parity.test.ts`
 
 ### Provider wiring
-* [ ] Mocked Calendar API returns "busy" for a slot → agent suggests 3 alternatives
-* [ ] Mocked Calendar API returns "available" → booking is created and business is notified
-* [ ] Calendar API auth failure → graceful error handling, no silent booking failure
-* [ ] Swapping `AI_PROVIDER` env var to a stub provider doesn't break agent behavior (proves no OpenAI-specific assumptions leaked into agent code)
+* [x] Mocked Calendar API returns "busy" for a slot → agent suggests 3 alternatives
+* [x] Mocked Calendar API returns "available" → booking is created and business is notified *("notified" = the calendar event itself; there's no separate notification channel in this design*)
+* [x] Calendar API auth failure → graceful error handling, no silent booking failure — fixed as part of this milestone: `confirmBooking` didn't catch `createBooking` errors at all, meaning a failure would silently drop the chatter's message with no reply since the channel-layer ack already happened; see regression log
+* [ ] Swapping `AI_PROVIDER` env var to a stub provider doesn't break agent behavior — not applicable yet: `concierge-service`/`cook-service` hardcode `OpenAIProvider` (see Milestone 4's progress log note — only one real provider exists, nothing to branch on)
 
 ### State & persistence
-* [ ] Redis session correctly tracks "active booking" state across multiple messages (e.g. "I'll take the 2nd one" resolves correctly)
-* [ ] Session state expires/cleans up appropriately
-* [ ] Postgres logging captures conversation + booking records without storing raw PII beyond policy
+* [x] Redis session correctly tracks "active booking" state across multiple messages (e.g. "I'll take the 2nd one" resolves correctly) — `apps/concierge-service/src/on-message.test.ts`, via `FakeSessionStore`
+* [x] Session state expires/cleans up appropriately — TTL passed through to `setex`, verified in `provider-session-redis` and both services' `on-message.test.ts`
+* [x] Postgres logging captures conversation + booking records without storing raw PII beyond policy — logs `text`/`sessionId`/`channel`/`agent` only, never a channel's raw payload; full PII redaction *within* that text (Milestone 10) is separate
 
 ### Service composition
-* [ ] `concierge-service` boots with WhatsApp + Telegram + OpenAI + Google Calendar all wired
-* [ ] `cook-service` boots with WhatsApp + Telegram + OpenAI wired
-* [ ] Health check / readiness endpoints respond correctly
-* [ ] Service starts cleanly with docker-compose (Redis + Postgres + service)
+* [x] `concierge-service` boots with WhatsApp + Telegram + OpenAI + Google Calendar all wired — `composition.test.ts` proves the wiring constructs cleanly (no live network calls needed for construction) using the real `business-config.example.json`
+* [x] `cook-service` boots with WhatsApp + Telegram + OpenAI wired — `composition.test.ts`
+* [x] Health check / readiness endpoints respond correctly
+* [ ] Service starts cleanly with docker-compose (Redis + Postgres + service) — `docker-compose.yml` + Dockerfiles exist and are structurally correct, but running it needs real OpenAI/Google credentials this environment doesn't have; not exercised end-to-end
 
 ---
 
@@ -159,6 +159,7 @@ Track fixed bugs here so they never silently reappear.
 |---|---|---|---|
 | 2026-04-28 | Booking for "this Saturday" suggested 2 May, a non-business day; expected rollover to 4 May | Business-hours map not excluding non-business days before slot suggestion | Unit test in §1 (Concierge — Date/Time & Booking Logic) |
 | 2026-08-13 | `resolveSlotSelection` mis-resolved free-text ordinal selection, e.g. "I'll take the 2nd one" → slot 1 instead of slot 2 | `ORDINAL_WORDS` was iterated via `Object.entries().find()` in insertion order, so the bare word "one" (present in "...2nd **one**" as a noun, not an ordinal) matched before "2nd" was ever checked | `booking-state.test.ts` → `resolveSlotSelection > resolves via a digit ordinal in free text`; fixed in `booking-state.ts` by replacing the map with an explicit `ORDINAL_PATTERNS` priority list (digit/digit-suffix and ordinal words checked before ambiguous bare number words) |
+| 2026-08-13 | A Google Calendar API failure during booking confirmation (auth/network/quota) silently dropped the chatter's message — no reply sent, since the channel-layer webhook ack already happened before the async `handleMessage` call that hit the error | `confirmBooking` in `handle-message.ts` had no `try`/`catch` around `calendarProvider.createBooking`; the thrown error propagated up to the service's `onMessage`, which only logs it, never replies | `handle-message.test.ts` → `degrades gracefully, without a silent failure, when the calendar API errors on createBooking`; fixed by catching the error and returning a "couldn't complete that booking" response instead of throwing |
 
 ---
 
