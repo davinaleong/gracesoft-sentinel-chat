@@ -50,7 +50,7 @@ These run against **every implementation** of a `core` interface, so behavior is
 ### Interface contract suites
 * [x] `AIProvider` contract suite passes for `provider-ai-openai`
 * [x] `AIProvider` contract suite passes for any stub/second implementation added later
-* [ ] `CalendarProvider` contract suite passes for `provider-calendar-google`
+* [x] `CalendarProvider` contract suite passes for `provider-calendar-google`
 * [ ] `ChannelAdapter` contract suite passes for `channel-whatsapp`
 * [ ] `ChannelAdapter` contract suite passes for `channel-telegram`
 

@@ -21,6 +21,11 @@
     "test": "vitest run",
     "lint": "eslint ."
   },
+  "dependencies": {
+    "@gracesoft-sentinel/core": "workspace:*",
+    "dayjs": "^1.11.13",
+    "googleapis": "^140.0.0"
+  },
   "devDependencies": {
     "@gracesoft-sentinel/config-tsconfig": "workspace:*",
     "typescript": "^5.7.3",

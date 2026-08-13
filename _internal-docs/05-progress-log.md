@@ -4,6 +4,28 @@ Companion to `01-milestone-checklist.md`. One entry per work session, newest fir
 
 ---
 
+## 2026-08-13 — Milestone 5: Calendar Provider Layer (`provider-calendar-google`)
+
+**Status:** Complete.
+
+**Extraction source:** legacy `packages/concierge/src/calendar.ts`, `config.ts`, `holidays.ts` in `../gracesoft-sentinel-whatsapp`. Legacy used the `googleapis` SDK with service-account JWT auth (`google.auth.JWT` + calendar scope), calling `freebusy.query` and `events.insert` directly from concierge flow code. Business hours were a **hardcoded fixed-slot array** (`AVAILABLE_HOURS = [9,10,11,14,15,16]`, 60-min slots) plus a hardcoded `Set` of Singapore public holidays for 2025-2026 in `holidays.ts` — exactly the design Milestone 2's `BusinessHours` (weekly map + dated exceptions) model replaced.
+
+**⚠️ Security note, not a code change:** the legacy repo has a live-looking GCP service-account key committed at its root — `../gracesoft-sentinel-whatsapp/gracesoft-sentinel-concierge-403f8f35c65a.json`. Did not open or copy it. Flagging for the user: that file should not be carried into this repo, and if it's a real still-active credential it likely needs rotation regardless, since it's sitting in git history. Not something I can fix by editing files here — needs a human decision (rotate the key, scrub git history if desired).
+
+**What was built:**
+- `google-calendar-client.ts` — `GoogleCalendarClient`, a minimal interface covering only the two Google Calendar endpoints actually used (`freebusy.query`, `events.insert`), plus `createGoogleCalendarClient()` building the real authenticated `googleapis` client (same JWT service-account auth as legacy, isolated behind this interface instead of called directly from agent/flow code). Testing substitutes a plain in-memory fake implementing this interface — no HTTP mocking needed, unlike `provider-ai-openai`'s approach with the OpenAI SDK.
+- `free-busy.ts` — `invertBusyToFree()`: the Google Calendar API reports *busy* periods, but `CalendarProvider.getAvailability` (per core's own dogfood fake) returns *free* windows — this inverts one into the other within the queried range. Pure, thoroughly unit-tested function (6 tests: no busy time, single/multiple busy blocks, full-range busy, malformed entries, out-of-range clipping).
+- `google-calendar-provider.ts` — `GoogleCalendarProvider implements CalendarProvider`. `getBusinessHours()` returns a `BusinessHours` object supplied at construction time (constructor config), not hardcoded — Google Calendar has no native "business hours" concept for a regular resource calendar, so real per-business hours/holiday data (e.g. the Singapore public-holiday CSVs already sitting in `_internal-docs/data/`) get wired in at Milestone 8's service composition, not baked into this package. `createBooking` maps `CreateBookingInput.attendee` onto Google's `attendees` field only when the contact looks like an email (Google's API expects an actual email address there, and the legacy version never populated attendees at all — improvement, not a behavior change to preserve).
+- `createGoogleCalendarProviderFromEnv(env, businessHours)` — reads `GOOGLE_SERVICE_ACCOUNT_EMAIL`/`GOOGLE_SERVICE_ACCOUNT_PRIVATE_KEY` (both required, clear errors if missing), mirrors `createOpenAIProviderFromEnv`'s shape from Milestone 4. `businessHours` is passed as a parameter rather than sourced from env, since it's structured business data.
+
+**Verified locally (all green):** `pnpm typecheck`, `pnpm lint`, `pnpm boundaries` (0 violations), `pnpm build`, `pnpm test` — 17/17 new tests in `provider-calendar-google`, 117/117 workspace-wide, zero network calls (fake client, no HTTP layer at all). Confirmed via `grep` that `agent-concierge/src` has no `googleapis` import.
+
+**Nothing deferred to the user for this milestone** beyond the security flag above — no live Google credentials were needed or used.
+
+**Next:** Milestone 6 — WhatsApp Channel (`channel-whatsapp`).
+
+---
+
 ## 2026-08-13 — Milestone 4: AI Provider Layer (`provider-ai-openai`)
 
 **Status:** Complete.

@@ -136,10 +136,10 @@ Formalize existing Google Calendar integration behind `CalendarProvider`.
 * Passes shared `CalendarProvider` contract test suite
 
 ### Checklist
-* [ ] Implement `GoogleCalendarProvider` against `CalendarProvider` interface
-* [ ] Run shared `CalendarProvider` contract test suite against it
-* [ ] Fold in timezone/business-hours fixes from Milestone 2
-* [ ] Move all direct Google Calendar API calls out of `agent-concierge`
+* [x] Implement `GoogleCalendarProvider` against `CalendarProvider` interface
+* [x] Run shared `CalendarProvider` contract test suite against it
+* [x] Fold in timezone/business-hours fixes from Milestone 2
+* [x] Move all direct Google Calendar API calls out of `agent-concierge`
 
 ---
 
