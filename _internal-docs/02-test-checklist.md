@@ -51,7 +51,7 @@ These run against **every implementation** of a `core` interface, so behavior is
 * [x] `AIProvider` contract suite passes for `provider-ai-openai`
 * [x] `AIProvider` contract suite passes for any stub/second implementation added later
 * [x] `CalendarProvider` contract suite passes for `provider-calendar-google`
-* [ ] `ChannelAdapter` contract suite passes for `channel-whatsapp`
+* [x] `ChannelAdapter` contract suite passes for `channel-whatsapp`
 * [ ] `ChannelAdapter` contract suite passes for `channel-telegram`
 
 ### Boundary enforcement
@@ -73,10 +73,10 @@ These run against **every implementation** of a `core` interface, so behavior is
 Real wiring, mocked external services where appropriate (mock WhatsApp/Telegram servers, mocked Calendar API, mocked OpenAI responses).
 
 ### Channel wiring
-* [ ] WhatsApp webhook verification handshake succeeds
-* [ ] WhatsApp inbound text message → correctly normalized → reaches agent
-* [ ] WhatsApp inbound image → media downloaded → correctly normalized → reaches agent
-* [ ] WhatsApp outbound response correctly formatted (including quick-reply/list for slot selection)
+* [x] WhatsApp webhook verification handshake succeeds
+* [x] WhatsApp inbound text message → correctly normalized → reaches agent *(via injected `onMessage` in `webhook-router.test.ts` — real `agent-concierge`/`agent-cook` wiring happens at Milestone 8)*
+* [x] WhatsApp inbound image → media downloaded → correctly normalized → reaches agent
+* [x] WhatsApp outbound response correctly formatted (including quick-reply/list for slot selection)
 * [ ] Telegram webhook/update → correctly normalized → reaches agent
 * [ ] Telegram outbound response correctly formatted (inline keyboard for slot selection)
 * [ ] **Cross-channel parity:** identical scenario run through WhatsApp adapter and Telegram adapter produces equivalent `NormalizedResponse` content from the agent

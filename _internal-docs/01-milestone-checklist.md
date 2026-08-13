@@ -155,11 +155,11 @@ Refactor the existing WhatsApp webhook integration into a `ChannelAdapter` imple
 * Media download handling (images for Cook)
 
 ### Checklist
-* [ ] Move webhook handler into `channel-whatsapp` package
-* [ ] Implement `parseInbound` (text + media + booking button/list replies)
-* [ ] Implement `formatOutbound`
-* [ ] Run shared `ChannelAdapter` contract test suite against it
-* [ ] Wire to `agent-concierge` and `agent-cook` via `core` contracts only (no reach-through)
+* [x] Move webhook handler into `channel-whatsapp` package
+* [x] Implement `parseInbound` (text + media + booking button/list replies)
+* [x] Implement `formatOutbound`
+* [x] Run shared `ChannelAdapter` contract test suite against it
+* [x] Wire to `agent-concierge` and `agent-cook` via `core` contracts only (no reach-through) — see progress log: the webhook router takes an injected `onMessage` callback rather than importing either agent, so the actual wiring happens at Milestone 8's service composition
 
 ---
 

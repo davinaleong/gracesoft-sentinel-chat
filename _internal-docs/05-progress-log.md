@@ -4,6 +4,28 @@ Companion to `01-milestone-checklist.md`. One entry per work session, newest fir
 
 ---
 
+## 2026-08-13 — Milestone 6: WhatsApp Channel (`channel-whatsapp`)
+
+**Status:** Complete.
+
+**Extraction source:** `../gracesoft-sentinel-whatsapp/packages/gateway-whatsapp` (Express webhook router) and `packages/whatsapp-client` (axios-based Graph API calls, inbound normalization, HMAC verification). Notable finding: legacy **never used WhatsApp's real interactive button/list messages** — the "3 slot options" were plain numbered text ("Reply with the number of your preferred slot"), and `normalize.ts` had dead types for `interactive`/`button` message types that nothing ever produced or consumed. Milestone 2's `agent-concierge` already emits proper `NormalizedResponse.quickReplies`, so this was an opportunity to actually wire that through to WhatsApp's real interactive messages rather than porting the numbered-text workaround.
+
+**What was built:**
+- `whatsapp-adapter.ts` — `WhatsAppChannelAdapter implements ChannelAdapter`. `formatOutbound` renders `quickReplies` as native WhatsApp interactive **reply buttons** (≤3 options — which happens to be exactly `agent-concierge`'s `DEFAULT_SLOT_COUNT`) or an interactive **list** (4-10 options), with defensive truncation to WhatsApp's actual button (20 char) / list-row (24 char) title limits. `parseInbound` handles text, `button_reply`/`list_reply` interactive replies (→ `quickReplyId`), and media messages.
+- **Media handling gap found and resolved:** WhatsApp Cloud API media URLs require an `Authorization` header and expire in minutes — handing one straight to `AIProvider.visionAnalyze({image:{url}})` (as Milestone 3's `agent-cook` does) wouldn't work, since that URL isn't fetchable by an external AI provider. `WhatsAppApiClient.downloadMediaAsDataUri()` downloads the bytes server-side (authenticated) and inlines them as a `data:` URI instead of a bare link — no `core` schema change needed, since `NormalizedMedia.url` is just a string and both `AIProvider.visionAnalyze` and OpenAI's own content-part format accept `data:` URIs transparently.
+- `signature.ts` — `verifyWhatsAppSignature()`, HMAC-SHA256 over the raw body via `X-Hub-Signature-256`, `timingSafeEqual` comparison (ported from legacy's `verify.ts`, same algorithm).
+- `webhook-verification.ts` — `handleVerificationRequest()`, the GET `hub.mode`/`hub.challenge`/`hub.verify_token` handshake, extracted as a pure function separate from the Express route so it's unit-testable without a server.
+- `webhook-router.ts` — `createWhatsAppWebhookRouter()`: GET handshake, POST signature check (raw body via `express.raw()`), acks 200 immediately then processes async (matches legacy's fast-ack-then-process pattern — Meta retries if you don't respond quickly). **Takes `onMessage` as an injected callback rather than importing `agent-concierge`/`agent-cook` directly** — composing a channel with an agent is Milestone 8's job (the service-wiring composition root), not something a channel package should hardcode. This also means `channel-whatsapp` has zero imports from either agent package, trivially satisfying that boundary without needing a dependency-cruiser rule for it.
+- `whatsapp-api-client.ts` — thin `fetch`-based wrapper over the Graph API (`sendMessage`, `downloadMediaAsDataUri`); no `axios` dependency, unlike legacy — consistent with `provider-ai-openai`'s approach of using an injectable `fetch` for testability without live network calls.
+
+**Verified locally (all green):** `pnpm typecheck`, `pnpm lint`, `pnpm boundaries` (0 violations), `pnpm build`, `pnpm test` — 33/33 new tests in `channel-whatsapp` (including a real end-to-end webhook integration test: spins up an actual `http` server, drives it with real `fetch` calls for the GET handshake, a signature-rejected POST, a correctly-signed inbound message reaching the injected `onMessage`, and the formatted reply being "sent"), 150/150 workspace-wide, zero live network calls anywhere.
+
+**Nothing deferred to the user for this milestone** — no live WhatsApp Business account/webhook registration was needed for this pass (that's a real-world deployment step for Milestone 8/10, not something testable in this repo).
+
+**Next:** Milestone 7 — Telegram Channel (`channel-telegram`).
+
+---
+
 ## 2026-08-13 — Milestone 5: Calendar Provider Layer (`provider-calendar-google`)
 
 **Status:** Complete.
