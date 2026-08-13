@@ -75,13 +75,13 @@ Extract FAQ + booking logic into a pure, platform-agnostic package that depends 
 * `handleMessage()` entry point consuming `NormalizedMessage` + `ConversationState`, returning `NormalizedResponse`
 
 ### Checklist
-* [ ] Extract FAQ matcher out of current WhatsApp-coupled code
-* [ ] Extract booking state machine + slot engine
-* [ ] Fix business-hours/timezone bug as part of extraction (write regression test first, see test checklist)
-* [ ] Wire agent to `AIProvider` and `CalendarProvider` interfaces only (no concrete SDK imports)
-* [ ] Implement `handleMessage()` public entry point
-* [ ] Confirm zero imports from `channel-*` or `provider-*` packages (boundary lint passes)
-* [ ] Unit test suite runnable with zero network calls (mock providers)
+* [x] Extract FAQ matcher out of current WhatsApp-coupled code
+* [x] Extract booking state machine + slot engine
+* [x] Fix business-hours/timezone bug as part of extraction (write regression test first, see test checklist)
+* [x] Wire agent to `AIProvider` and `CalendarProvider` interfaces only (no concrete SDK imports)
+* [x] Implement `handleMessage()` public entry point
+* [x] Confirm zero imports from `channel-*` or `provider-*` packages (boundary lint passes)
+* [x] Unit test suite runnable with zero network calls (mock providers)
 
 ---
 

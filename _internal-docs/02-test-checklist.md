@@ -16,24 +16,24 @@ Companion to `milestone-checklist.md`. Testing strategy is four-layered — the 
 No WhatsApp, no Telegram, no OpenAI SDK, no live Calendar API — everything mocked via `core` interfaces.
 
 ### Concierge — Date/Time & Booking Logic
-* [ ] No date/time given → returns next 3 available slots
-* [ ] No date/time given → client picks slot 2 → booking created for correct slot
-* [ ] No date/time given → client rejects all 3 → falls through to re-prompt / other scenarios
-* [ ] Date + time given, slot available → booking created directly
-* [ ] Date + time given, slot unavailable → returns next 3 available slots
-* [ ] Date only given → returns next 3 slots on/after that date
-* [ ] Time only given, within office hours → assumes today, checks availability
-* [ ] Time only given, today unavailable → next 3 slots roll over to next business day
-* [ ] Time only given, outside office hours / near closing → returns next 3 slots directly (no same-day assumption)
-* [ ] **Regression:** business-hours map correctly excludes non-business days (e.g. 2 May) — next-slot suggestion rolls to the correct next business day (4 May), not the excluded date *(directly reproduces the bug in `testing.md`)*
-* [ ] Timezone handling: booking created in business's configured timezone regardless of client's apparent locale/phrasing
-* [ ] Day.js formatting consistency across slot suggestion → confirmation → calendar write
+* [x] No date/time given → returns next 3 available slots
+* [x] No date/time given → client picks slot 2 → booking created for correct slot
+* [x] No date/time given → client rejects all 3 → falls through to re-prompt / other scenarios
+* [x] Date + time given, slot available → booking created directly
+* [x] Date + time given, slot unavailable → returns next 3 available slots
+* [x] Date only given → returns next 3 slots on/after that date
+* [x] Time only given, within office hours → assumes today, checks availability
+* [x] Time only given, today unavailable → next 3 slots roll over to next business day
+* [x] Time only given, outside office hours / near closing → returns next 3 slots directly (no same-day assumption)
+* [x] **Regression:** business-hours map correctly excludes non-business days (e.g. 2 May) — next-slot suggestion rolls to the correct next business day (4 May), not the excluded date *(directly reproduces the bug in `testing.md`)*
+* [x] Timezone handling: booking created in business's configured timezone regardless of client's apparent locale/phrasing
+* [x] Day.js formatting consistency across slot suggestion → confirmation → calendar write
 
 ### Concierge — FAQ Logic
-* [ ] Known FAQ question → correct blueprint answer returned
-* [ ] Question with no confident match → escalates to business rep, does not guess
-* [ ] Low-confidence match → escalates rather than returning a shaky answer
-* [ ] Escalation preserves conversation context (client doesn't have to repeat themselves)
+* [x] Known FAQ question → correct blueprint answer returned
+* [x] Question with no confident match → escalates to business rep, does not guess
+* [x] Low-confidence match → escalates rather than returning a shaky answer
+* [x] Escalation preserves conversation context (client doesn't have to repeat themselves)
 
 ### Cook — Recognition & Recipe Logic
 * [ ] Clear dish photo → correct dish name inferred
@@ -158,6 +158,7 @@ Track fixed bugs here so they never silently reappear.
 | Date | Bug | Root cause | Test added |
 |---|---|---|---|
 | 2026-04-28 | Booking for "this Saturday" suggested 2 May, a non-business day; expected rollover to 4 May | Business-hours map not excluding non-business days before slot suggestion | Unit test in §1 (Concierge — Date/Time & Booking Logic) |
+| 2026-08-13 | `resolveSlotSelection` mis-resolved free-text ordinal selection, e.g. "I'll take the 2nd one" → slot 1 instead of slot 2 | `ORDINAL_WORDS` was iterated via `Object.entries().find()` in insertion order, so the bare word "one" (present in "...2nd **one**" as a noun, not an ordinal) matched before "2nd" was ever checked | `booking-state.test.ts` → `resolveSlotSelection > resolves via a digit ordinal in free text`; fixed in `booking-state.ts` by replacing the map with an explicit `ORDINAL_PATTERNS` priority list (digit/digit-suffix and ordinal words checked before ambiguous bare number words) |
 
 ---
 

@@ -22,17 +22,25 @@ export function formatSlotLabel(iso: string, timezone: string): string {
   return inBusinessTz(iso, timezone).format("ddd, D MMM, h:mma");
 }
 
-const ORDINAL_WORDS: Record<string, number> = {
-  first: 1,
-  one: 1,
-  "1st": 1,
-  second: 2,
-  two: 2,
-  "2nd": 2,
-  third: 3,
-  three: 3,
-  "3rd": 3,
-};
+/**
+ * Checked in priority order, most-to-least unambiguous. Bare number words
+ * ("one", "two", "three") are checked last because they're ordinary English
+ * words that can appear in a sentence without meaning an ordinal — e.g.
+ * "the 2nd one" contains the word "one" as a noun, not as a synonym for
+ * "first"; if word-forms were checked without regard to specificity, that
+ * sentence would wrongly resolve to slot 1 instead of slot 2.
+ */
+const ORDINAL_PATTERNS: [RegExp, number][] = [
+  [/\b1(?:st)?\b/, 1],
+  [/\b2(?:nd)?\b/, 2],
+  [/\b3(?:rd)?\b/, 3],
+  [/\bfirst\b/, 1],
+  [/\bsecond\b/, 2],
+  [/\bthird\b/, 3],
+  [/\bone\b/, 1],
+  [/\btwo\b/, 2],
+  [/\bthree\b/, 3],
+];
 
 const REJECTION_PATTERN = /\b(none|neither|nope|no thanks|doesn't work|don't work|not (?:good|working|ok|available))\b/i;
 
@@ -53,10 +61,7 @@ export function resolveSlotSelection(params: {
 
   if (params.text) {
     const lower = params.text.toLowerCase();
-    const digitMatch = lower.match(/\b([123])\b/);
-    const index = digitMatch
-      ? Number(digitMatch[1])
-      : Object.entries(ORDINAL_WORDS).find(([word]) => new RegExp(`\\b${word}\\b`).test(lower))?.[1];
+    const index = ORDINAL_PATTERNS.find(([pattern]) => pattern.test(lower))?.[1];
     if (index !== undefined) return params.candidates[index - 1];
   }
 
