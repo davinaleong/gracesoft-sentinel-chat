@@ -97,12 +97,12 @@ Extract dish-recognition-to-recipe logic into the same pure-package shape as Con
 * `handleMessage()` entry point (image or text input)
 
 ### Checklist
-* [ ] Extract dish recognition logic out of current WhatsApp-coupled code
-* [ ] Extract recipe generation + formatting logic
-* [ ] Wire agent to `AIProvider` interface only
-* [ ] Implement `handleMessage()` public entry point
-* [ ] Confirm zero imports from `channel-*` or `provider-*` packages
-* [ ] Unit test suite runnable with zero network calls (mock `AIProvider`)
+* [x] Extract dish recognition logic out of current WhatsApp-coupled code
+* [x] Extract recipe generation + formatting logic
+* [x] Wire agent to `AIProvider` interface only
+* [x] Implement `handleMessage()` public entry point
+* [x] Confirm zero imports from `channel-*` or `provider-*` packages
+* [x] Unit test suite runnable with zero network calls (mock `AIProvider`)
 
 ---
 

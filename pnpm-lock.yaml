@@ -47,6 +47,10 @@ importers:
         version: 3.2.7
 
   packages/agent-cook:
+    dependencies:
+      '@gracesoft-sentinel/core':
+        specifier: workspace:*
+        version: link:../core
     devDependencies:
       '@gracesoft-sentinel/config-tsconfig':
         specifier: workspace:*

@@ -36,10 +36,10 @@ No WhatsApp, no Telegram, no OpenAI SDK, no live Calendar API — everything moc
 * [x] Escalation preserves conversation context (client doesn't have to repeat themselves)
 
 ### Cook — Recognition & Recipe Logic
-* [ ] Clear dish photo → correct dish name inferred
-* [ ] Ambiguous/low-confidence dish photo → appropriate fallback response (not a confident wrong guess)
-* [ ] Recipe generation includes ingredients, method, substitutions, serving suggestions for a known dish
-* [ ] Dietary adjustment request (e.g. "make it vegetarian") correctly modifies ingredient list
+* [x] Clear dish photo → correct dish name inferred
+* [x] Ambiguous/low-confidence dish photo → appropriate fallback response (not a confident wrong guess)
+* [x] Recipe generation includes ingredients, method, substitutions, serving suggestions for a known dish
+* [x] Dietary adjustment request (e.g. "make it vegetarian") correctly modifies ingredient list
 
 ---
 

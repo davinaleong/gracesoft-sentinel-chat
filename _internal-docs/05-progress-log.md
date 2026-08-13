@@ -4,6 +4,28 @@ Companion to `01-milestone-checklist.md`. One entry per work session, newest fir
 
 ---
 
+## 2026-08-13 — Milestone 3: Cook Agent Core (`agent-cook`)
+
+**Status:** Complete.
+
+**Extraction source:** the legacy monolith at `../gracesoft-sentinel-whatsapp/packages/cook` (found alongside `packages/ai-provider`, `packages/gateway-core`, etc. — the "WhatsApp-only apps" the whole rearchitecture is migrating away from). Read `ai.ts` (single combined vision call returning dish + full recipe as JSON), `flow.ts` (session state machine: prompt for photo → analyse → done), `formatter.ts` (WhatsApp-asterisk-formatted text), and `faq.ts` (simple substring-keyword FAQ, **not** carried over — Milestone 3's deliverables/checklist don't list a Cook FAQ, unlike Concierge's explicit FAQ deliverable, so adding one would be scope creep).
+
+**What was built, and how it differs from the legacy version:**
+- `dish-classifier.ts` — `classifyDish(imageUrl, aiProvider)`, using `AIProvider.visionAnalyze` only, to get *just* the dish name (or a `null` + reason if unidentifiable). Split out from recipe generation on purpose, per the Milestone 3 deliverable list ("image → `visionAnalyze` → dish name" as one flow, "dish name → `chatComplete` → structured recipe" as a separate one) — the legacy version did both in a single vision call. The benefit isn't just architectural: an ambiguous photo now short-circuits before ever calling `chatComplete`, instead of generating a full (fabricated) recipe for an unidentified dish.
+- `recipe-generator.ts` — `generateRecipe({dishName, aiProvider, dietaryAdjustment?, baseRecipe?})`, using `AIProvider.chatComplete`. Recipe shape gained `substitutions`/`servingSuggestions` as first-class structured fields (legacy only had free-text steps/ingredients/nutrition). The dietary-adjustment path feeds the *existing* recipe's ingredients/steps back into the prompt so the model adjusts in place ("swap chicken for tofu") rather than regenerating a possibly-unrelated recipe from scratch.
+- `dietary-adjustment.ts` — `isDietaryAdjustmentRequest()`, a small deterministic keyword detector (vegetarian/vegan/gluten-free/halal/etc.), same "not an LLM call" philosophy as `agent-concierge`'s `booking-intent.ts`.
+- `formatter.ts` — `formatRecipe`/`formatUnidentifiedDish`. Deliberately **plain text, no WhatsApp-style asterisks** — the legacy formatter baked WhatsApp markdown directly into the agent layer, which breaks the "channel-agnostic" principle this whole rearchitecture exists for. Markup translation belongs in `ChannelAdapter.formatOutbound()` (Milestone 6/7), not here.
+- `handle-message.ts` — `handleMessage()`: a photo always wins (classify + generate, replacing whatever state existed); otherwise a dietary-adjustment request against `context.lastRecipe` is handled in place; otherwise prompts for/reminds about a photo. AI failures (thrown errors from either provider call) are caught and turned into a plain apology rather than propagating — matches the legacy `try/catch` behavior in `flow.ts`, now living in the platform-agnostic layer instead of tied to WhatsApp.
+- `test-support.ts` — a `FakeAiProvider` implementing all three `AIProvider` methods (only `chatComplete`/`visionAnalyze` are exercised; `embed` throws if called, since nothing here should call it), plus scripted happy-path/unidentified-dish fixtures.
+
+**Verified locally (all green):** `pnpm typecheck`, `pnpm lint`, `pnpm boundaries` (0 violations), `pnpm build`, `pnpm test` — 25/25 new tests in `agent-cook`, 90/90 workspace-wide, zero network calls. Confirmed via `grep` that `agent-cook/src` has no `channel-*`/`provider-*` imports.
+
+**Nothing deferred to the user for this milestone** — no external accounts/credentials were needed (the legacy repo's real OpenAI/Anthropic keys were never touched; everything here runs against the `AIProvider` interface and fakes).
+
+**Next:** Milestone 4 — AI Provider Layer (`provider-ai-openai`).
+
+---
+
 ## 2026-08-13 — Milestone 2 addendum: FAQ matcher redesigned to be LLM-grounded
 
 **Status:** Complete. Supersedes the "no `AIProvider` import" decision note in the entry below.
