@@ -4,6 +4,27 @@ Companion to `01-milestone-checklist.md`. One entry per work session, newest fir
 
 ---
 
+## 2026-08-13 — Milestone 4: AI Provider Layer (`provider-ai-openai`)
+
+**Status:** Complete.
+
+**What was built:**
+- `openai-provider.ts` — `OpenAIProvider implements AIProvider`, wrapping the `openai` npm SDK (v4). `chatComplete`/`visionAnalyze` both go through `client.chat.completions.create` (vision as a `user` message with `image_url`/`text` content parts, base64 images turned into a `data:` URI); `embed` goes through `client.embeddings.create` with `encoding_format: "float"` explicitly set — the SDK defaults to `"base64"` and decodes it client-side into a `Float32Array` when unset, which doesn't match a plain-JSON mocked response and silently produced empty vectors until this was set explicitly (caught by the contract suite, see below).
+- `createOpenAIProviderFromEnv(env)` — reads `OPENAI_API_KEY` (required, throws a clear error if missing) plus optional `OPENAI_MODEL`/`OPENAI_VISION_MODEL`/`OPENAI_EMBEDDING_MODEL`. This is the "config resolution" checklist item, scoped down: since `provider-ai-openai` is the only real `AIProvider` implementation that exists yet, there's nothing to branch an `AI_PROVIDER=openai|...` switch on. Full multi-provider env resolution is deferred to Milestone 8's service-wiring composition root, where it'll actually have >1 case.
+- `openai-provider.test.ts` — runs `core`'s shared `runAIProviderContractTests` against `OpenAIProvider` wired to a mocked `fetch` (via the SDK's own `fetch` constructor override) returning canned OpenAI-shaped JSON — no live network calls.
+- `stub-ai-provider.test.ts` — the Milestone 4 stretch goal: an `EchoAiProvider`, a deliberately non-OpenAI-shaped, non-HTTP `AIProvider` implementation (no "model" concept, no `response_format`), running the *same* shared contract suite. Passing proves `AIProvider` genuinely generalises rather than being OpenAI's API surface with the serial numbers filed off.
+
+**Verified locally (all green):** `pnpm typecheck`, `pnpm lint`, `pnpm boundaries` (0 violations), `pnpm build`, `pnpm test` — 10/10 new tests in `provider-ai-openai` (7 contract + 3 stub-contract... actually 3 request-shaping/env tests, contract suite itself contributes more), 100/100 workspace-wide. Confirmed via `grep` that neither `agent-concierge` nor `agent-cook` import the `openai` package directly.
+
+**Decisions made without a stop-and-ask (low-stakes/reversible, flagged here for visibility):**
+- The `openai` SDK's Node type shims assume a `node-fetch`-shaped `Response`; Node's native global `Response` (used in the mock) is structurally close but not identical (missing `node-fetch`-only fields like `buffer`/`size`). Cast through `unknown` in the test's mock fetch — a test-only type affordance, doesn't affect runtime behavior against the real API.
+
+**Nothing deferred to the user for this milestone** — no live OpenAI API key was needed or used; a real key becomes necessary only when someone runs this against the live API (Milestone 8 deployment or later), which is out of scope for this pass.
+
+**Next:** Milestone 5 — Calendar Provider Layer (`provider-calendar-google`).
+
+---
+
 ## 2026-08-13 — Milestone 3: Cook Agent Core (`agent-cook`)
 
 **Status:** Complete.

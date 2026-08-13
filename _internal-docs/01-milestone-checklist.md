@@ -117,11 +117,11 @@ Wrap the existing OpenAI usage behind the `AIProvider` interface so either agent
 * Passes the `AIProvider` shared contract test suite from Milestone 1
 
 ### Checklist
-* [ ] Implement `OpenAIProvider` against `AIProvider` interface
-* [ ] Run shared `AIProvider` contract test suite against it
-* [ ] Move all direct OpenAI SDK calls out of `agent-concierge` / `agent-cook`
-* [ ] Add config resolution (`AI_PROVIDER=openai`) in service wiring layer
-* [ ] (Stretch) Stub a second provider (even a fake/mock one) to prove the interface isn't accidentally OpenAI-shaped
+* [x] Implement `OpenAIProvider` against `AIProvider` interface
+* [x] Run shared `AIProvider` contract test suite against it
+* [x] Move all direct OpenAI SDK calls out of `agent-concierge` / `agent-cook`
+* [x] Add config resolution (`AI_PROVIDER=openai`) in service wiring layer — see progress log for scope note (only one real provider exists, so this is `createOpenAIProviderFromEnv()`; full multi-provider branching lands with Milestone 8's composition root)
+* [x] (Stretch) Stub a second provider (even a fake/mock one) to prove the interface isn't accidentally OpenAI-shaped
 
 ---
 

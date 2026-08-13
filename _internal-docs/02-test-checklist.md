@@ -48,8 +48,8 @@ No WhatsApp, no Telegram, no OpenAI SDK, no live Calendar API — everything moc
 These run against **every implementation** of a `core` interface, so behavior is guaranteed identical regardless of which provider/channel is plugged in.
 
 ### Interface contract suites
-* [ ] `AIProvider` contract suite passes for `provider-ai-openai`
-* [ ] `AIProvider` contract suite passes for any stub/second implementation added later
+* [x] `AIProvider` contract suite passes for `provider-ai-openai`
+* [x] `AIProvider` contract suite passes for any stub/second implementation added later
 * [ ] `CalendarProvider` contract suite passes for `provider-calendar-google`
 * [ ] `ChannelAdapter` contract suite passes for `channel-whatsapp`
 * [ ] `ChannelAdapter` contract suite passes for `channel-telegram`
