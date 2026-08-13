@@ -1,4 +1,5 @@
 import type {
+  AIProvider,
   BusinessConfig,
   CalendarProvider,
   ConversationState,
@@ -14,8 +15,8 @@ import {
   toBookingCandidates,
   type ConciergeContext,
 } from "./booking-state.js";
-import type { FaqEntry } from "./faq-matcher.js";
-import { matchFaq } from "./faq-matcher.js";
+import type { FaqGroundingBlueprint } from "./faq-matcher.js";
+import { answerFaq } from "./faq-matcher.js";
 import { DEFAULT_SLOT_DURATION_MINUTES, findNextAvailableSlots, isSlotAvailable } from "./slot-engine.js";
 import { businessNow, dayjs } from "./time.js";
 
@@ -24,7 +25,8 @@ export interface ConciergeHandleMessageInput {
   state: ConversationState;
   businessConfig: BusinessConfig;
   calendarProvider: CalendarProvider;
-  faqBlueprint: FaqEntry[];
+  aiProvider: AIProvider;
+  faqBlueprint: FaqGroundingBlueprint;
   /** Injection point for deterministic tests; defaults to the real clock. */
   now?: Date;
 }
@@ -227,15 +229,19 @@ async function handleBookingRequest(params: {
   return offerSlotsResponse(slots, businessConfig.timezone, state, "Here are the next available slots:");
 }
 
-function escalate(state: ConversationState, message: NormalizedMessage): ConciergeHandleMessageResult {
+function escalate(
+  state: ConversationState,
+  message: NormalizedMessage,
+  responseText: string
+): ConciergeHandleMessageResult {
   return {
-    response: { text: "Let me get one of our team to help with that — they'll follow up shortly." },
+    response: { text: responseText },
     state: withContext(state, { lastEscalatedMessage: message.text }),
   };
 }
 
-export async function handleMessage(input: ConciergeHandleMessageInput): Promise<ConciergeHandleMessageResult> {
-  const { message, businessConfig, calendarProvider, faqBlueprint } = input;
+async function handleMessageInner(input: ConciergeHandleMessageInput): Promise<ConciergeHandleMessageResult> {
+  const { message, businessConfig, calendarProvider, aiProvider, faqBlueprint } = input;
   const now = businessNow(businessConfig.timezone, input.now);
   const context = (input.state.context ?? {}) as ConciergeContext;
 
@@ -263,10 +269,42 @@ export async function handleMessage(input: ConciergeHandleMessageInput): Promise
     });
   }
 
-  const match = matchFaq(text, faqBlueprint);
-  if (match) {
-    return { response: { text: match.entry.answer }, state: withContext(input.state, context) };
+  const answer = await answerFaq(text, faqBlueprint, aiProvider);
+  if (answer.escalate) {
+    return escalate(input.state, message, answer.text);
   }
+  return { response: { text: answer.text }, state: withContext(input.state, context) };
+}
 
-  return escalate(input.state, message);
+/**
+ * The blueprint's `ai_disclosure` is a compliance requirement, not a style
+ * choice: the chatter must be told they're talking to an AI at the start of
+ * every new conversation. Applied as a wrapper so every response path
+ * (booking, FAQ, escalation) gets it exactly once per session, without each
+ * branch needing to remember to do it itself.
+ */
+function withAiDisclosure(
+  input: ConciergeHandleMessageInput,
+  result: ConciergeHandleMessageResult
+): ConciergeHandleMessageResult {
+  const alreadyDisclosed = Boolean((input.state.context as ConciergeContext | undefined)?.aiDisclosed);
+  if (alreadyDisclosed || !input.faqBlueprint.ai_disclosure.required) return result;
+
+  const opening = input.faqBlueprint.ai_disclosure.opening_message;
+  const priorText = result.response.text;
+  return {
+    response: {
+      ...result.response,
+      text: priorText ? `${opening}\n\n${priorText}` : opening,
+    },
+    state: {
+      ...result.state,
+      context: { ...(result.state.context as ConciergeContext), aiDisclosed: true },
+    },
+  };
+}
+
+export async function handleMessage(input: ConciergeHandleMessageInput): Promise<ConciergeHandleMessageResult> {
+  const result = await handleMessageInner(input);
+  return withAiDisclosure(input, result);
 }

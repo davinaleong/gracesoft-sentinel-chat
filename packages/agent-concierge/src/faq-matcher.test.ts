@@ -1,33 +1,46 @@
 import { describe, expect, it } from "vitest";
-import { matchFaq } from "./faq-matcher.js";
-import { TEST_FAQ_BLUEPRINT } from "./test-support.js";
+import { answerFaq } from "./faq-matcher.js";
+import { fakeAiProviderAnswering, fakeAiProviderWith, TEST_FAQ_BLUEPRINT } from "./test-support.js";
 
-describe("matchFaq", () => {
-  it("returns the correct blueprint answer for a known question", () => {
-    const result = matchFaq("What are your opening hours?", TEST_FAQ_BLUEPRINT);
-    expect(result?.entry.id).toBe("faq-hours");
+describe("answerFaq", () => {
+  it("returns the model's answer and escalate=false for a well-formed JSON response", async () => {
+    const provider = fakeAiProviderAnswering("We're open Monday to Friday 9am-6pm.", false);
+    const result = await answerFaq("What are your opening hours?", TEST_FAQ_BLUEPRINT, provider);
+    expect(result).toEqual({ text: "We're open Monday to Friday 9am-6pm.", escalate: false });
   });
 
-  it("matches on keyword overlap even with different phrasing", () => {
-    const result = matchFaq("what time do you open", TEST_FAQ_BLUEPRINT);
-    expect(result?.entry.id).toBe("faq-hours");
+  it("surfaces escalate=true when the model decides to hand off", async () => {
+    const provider = fakeAiProviderAnswering("Let me connect you with the team: hello@example.com", true);
+    const result = await answerFaq("Can I speak to a real person?", TEST_FAQ_BLUEPRINT, provider);
+    expect(result.escalate).toBe(true);
+    expect(result.text).toMatch(/connect you with the team/i);
   });
 
-  it("returns null (escalate) for a question with no confident match", () => {
-    const result = matchFaq("Do you sell coffee?", TEST_FAQ_BLUEPRINT);
-    expect(result).toBeNull();
+  it("degrades gracefully to the raw text when the model doesn't return the requested JSON shape", async () => {
+    const provider = fakeAiProviderWith(() => ({ text: "We're open 9-6 on weekdays." }));
+    const result = await answerFaq("hours?", TEST_FAQ_BLUEPRINT, provider);
+    expect(result).toEqual({ text: "We're open 9-6 on weekdays.", escalate: false });
   });
 
-  it("returns null (escalate) rather than a shaky low-confidence answer", () => {
-    const result = matchFaq("hi", TEST_FAQ_BLUEPRINT, 0.5);
-    expect(result).toBeNull();
+  it("falls back to the blueprint's handoff message when the model returns nothing usable", async () => {
+    const provider = fakeAiProviderWith(() => ({ text: "" }));
+    const result = await answerFaq("???", TEST_FAQ_BLUEPRINT, provider);
+    expect(result.text).toBe(TEST_FAQ_BLUEPRINT.escalation_policy.example_handoff_response);
+    expect(result.escalate).toBe(false);
   });
 
-  it("respects a custom confidence threshold", () => {
-    const lenient = matchFaq("address please", TEST_FAQ_BLUEPRINT, 0.05);
-    expect(lenient?.entry.id).toBe("faq-location");
+  it("grounds the call in the blueprint's system prompt, knowledge base, and guardrails", async () => {
+    const provider = fakeAiProviderAnswering("some answer");
+    await answerFaq("What are your opening hours?", TEST_FAQ_BLUEPRINT, provider);
 
-    const strict = matchFaq("address please", TEST_FAQ_BLUEPRINT, 0.9);
-    expect(strict).toBeNull();
+    expect(provider.calls).toHaveLength(1);
+    const { messages } = provider.calls[0]!;
+    const systemMessage = messages.find((m) => m.role === "system");
+    expect(systemMessage?.content).toContain(TEST_FAQ_BLUEPRINT.system_prompt);
+    expect(systemMessage?.content).toContain("123 Example Street, Singapore.");
+    expect(systemMessage?.content).toContain(TEST_FAQ_BLUEPRINT.guardrails[0]);
+
+    const userMessage = messages.find((m) => m.role === "user");
+    expect(userMessage?.content).toBe("What are your opening hours?");
   });
 });

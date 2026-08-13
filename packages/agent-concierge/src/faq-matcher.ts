@@ -1,63 +1,90 @@
-const STOPWORDS = new Set([
-  "the", "a", "an", "is", "are", "do", "does", "you", "your", "i", "to", "for",
-  "of", "in", "on", "at", "and", "or", "it", "can", "what", "how", "me", "my",
-]);
+import type { AIProvider } from "@gracesoft-sentinel/core";
 
-export interface FaqEntry {
-  id: string;
-  question: string;
-  answer: string;
-  keywords?: string[];
+/**
+ * Business-owned FAQ grounding context for an LLM-powered assistant —
+ * a system prompt + knowledge base + guardrails, not a trigger-phrase
+ * lookup table. The model reads `knowledge_base` and generates its own
+ * answer, constrained by `guardrails` and `escalation_policy`, rather than
+ * us pattern-matching a fixed Q&A list.
+ */
+export interface FaqGroundingBlueprint {
+  system_prompt: string;
+  ai_disclosure: {
+    required: boolean;
+    opening_message: string;
+    if_asked_directly?: string;
+  };
+  /** Arbitrary structured facts the model must ground every answer in. */
+  knowledge_base: unknown;
+  guardrails: string[];
+  escalation_policy: {
+    conditions: string[];
+    handoff_instruction: string;
+    example_handoff_response: string;
+  };
+  example_exchanges?: { user: string; assistant: string }[];
 }
 
-export interface FaqMatchResult {
-  entry: FaqEntry;
-  confidence: number;
+export interface FaqAnswerResult {
+  text: string;
+  escalate: boolean;
 }
 
-export const DEFAULT_FAQ_CONFIDENCE_THRESHOLD = 0.3;
+function buildSystemPrompt(blueprint: FaqGroundingBlueprint): string {
+  const parts = [
+    blueprint.system_prompt,
+    `Knowledge base (JSON — ground every factual claim in this, never state a fact that isn't here):\n${JSON.stringify(blueprint.knowledge_base)}`,
+    `Guardrails:\n- ${blueprint.guardrails.join("\n- ")}`,
+    `Escalate to a human (set "escalate": true) when any of:\n- ${blueprint.escalation_policy.conditions.join("\n- ")}\n${blueprint.escalation_policy.handoff_instruction}`,
+  ];
 
-function tokenize(text: string): Set<string> {
-  return new Set(
-    text
-      .toLowerCase()
-      .replace(/[^a-z0-9\s]/g, " ")
-      .split(/\s+/)
-      .filter((word) => word.length > 0 && !STOPWORDS.has(word))
-  );
-}
-
-function jaccardSimilarity(a: Set<string>, b: Set<string>): number {
-  if (a.size === 0 || b.size === 0) return 0;
-  let intersection = 0;
-  for (const word of a) {
-    if (b.has(word)) intersection++;
+  if (blueprint.example_exchanges?.length) {
+    parts.push(
+      `Tone/style examples (illustrative only — do not reuse the JSON format shown below for these):\n` +
+        blueprint.example_exchanges.map((e) => `Q: ${e.user}\nA: ${e.assistant}`).join("\n\n")
+    );
   }
-  const union = a.size + b.size - intersection;
-  return union === 0 ? 0 : intersection / union;
+
+  parts.push(
+    `Respond with JSON only, no markdown, no text outside the object: {"answer": string, "escalate": boolean}. ` +
+      `"answer" is exactly what should be said to the chatter — if escalating, make it a handoff message in the spirit of: "${blueprint.escalation_policy.example_handoff_response}".`
+  );
+
+  return parts.join("\n\n");
+}
+
+function parseFaqAnswer(raw: string, blueprint: FaqGroundingBlueprint): FaqAnswerResult {
+  try {
+    const parsed = JSON.parse(raw) as { answer?: unknown; escalate?: unknown };
+    if (typeof parsed.answer === "string" && parsed.answer.trim().length > 0) {
+      return { text: parsed.answer, escalate: parsed.escalate === true };
+    }
+  } catch {
+    // Falls through to the raw-text fallback below.
+  }
+  // The model didn't return the requested JSON shape — degrade gracefully
+  // to the raw text rather than surfacing a hard error to the chatter.
+  return { text: raw.trim() || blueprint.escalation_policy.example_handoff_response, escalate: false };
 }
 
 /**
- * Deterministic keyword-overlap matcher with a confidence score — not an
- * LLM call. Below `threshold` we escalate rather than guess: a shaky match
- * is worse than no match, per Milestone 2's FAQ deliverable.
+ * Answers a chatter's question by grounding an LLM call in the business's
+ * FAQ blueprint, rather than matching against a fixed Q&A list. Escalation
+ * is a signal the model itself decides (per `escalation_policy`), surfaced
+ * back to the caller as a boolean so `handleMessage` can track it in state.
  */
-export function matchFaq(
+export async function answerFaq(
   text: string,
-  blueprint: FaqEntry[],
-  threshold: number = DEFAULT_FAQ_CONFIDENCE_THRESHOLD
-): FaqMatchResult | null {
-  const queryTokens = tokenize(text);
-  let best: FaqMatchResult | null = null;
-
-  for (const entry of blueprint) {
-    const entryTokens = tokenize([entry.question, ...(entry.keywords ?? [])].join(" "));
-    const confidence = jaccardSimilarity(queryTokens, entryTokens);
-    if (!best || confidence > best.confidence) {
-      best = { entry, confidence };
-    }
-  }
-
-  if (!best || best.confidence < threshold) return null;
-  return best;
+  blueprint: FaqGroundingBlueprint,
+  aiProvider: AIProvider
+): Promise<FaqAnswerResult> {
+  const result = await aiProvider.chatComplete({
+    messages: [
+      { role: "system", content: buildSystemPrompt(blueprint) },
+      { role: "user", content: text },
+    ],
+    temperature: 0.2,
+    maxTokens: 400,
+  });
+  return parseFaqAnswer(result.text, blueprint);
 }

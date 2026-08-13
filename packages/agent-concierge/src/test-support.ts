@@ -1,14 +1,21 @@
 import type {
+  AIProvider,
   AvailabilitySlot,
   Booking,
   BusinessConfig,
   BusinessHours,
   CalendarProvider,
+  ChatCompleteInput,
+  ChatCompleteResult,
   CreateBookingInput,
+  EmbedInput,
+  EmbedResult,
   GetAvailabilityInput,
   GetBusinessHoursInput,
+  VisionAnalyzeInput,
+  VisionAnalyzeResult,
 } from "@gracesoft-sentinel/core";
-import type { FaqEntry } from "./faq-matcher.js";
+import type { FaqGroundingBlueprint } from "./faq-matcher.js";
 
 /**
  * Mirrors the `testing.md` regression scenario: Mon-Fri 09:00-18:00,
@@ -37,20 +44,56 @@ export const TEST_BUSINESS_CONFIG: BusinessConfig = {
   businessHours: TEST_BUSINESS_HOURS,
 };
 
-export const TEST_FAQ_BLUEPRINT: FaqEntry[] = [
-  {
-    id: "faq-hours",
-    question: "What are your opening hours?",
-    answer: "We're open Monday to Friday 9am-6pm and Saturday 9am-1pm.",
-    keywords: ["opening", "hours", "open", "close", "time"],
+export const TEST_FAQ_BLUEPRINT: FaqGroundingBlueprint = {
+  system_prompt: "You are the Test Business Assistant, answering questions about Test Business.",
+  ai_disclosure: {
+    required: true,
+    opening_message: "Hi, I'm the Test Business Assistant — an AI, not a human.",
+    if_asked_directly: "Confirm directly that you're an AI, never imply otherwise.",
   },
-  {
-    id: "faq-location",
-    question: "Where are you located?",
-    answer: "We're at 123 Example Street, Singapore.",
-    keywords: ["location", "address", "where", "directions"],
+  knowledge_base: {
+    hours: "Monday to Friday 9am-6pm, Saturday 9am-1pm.",
+    location: "123 Example Street, Singapore.",
   },
-];
+  guardrails: ["Never state pricing — none is published.", "Never invent facts not in knowledge_base."],
+  escalation_policy: {
+    conditions: ["The chatter explicitly asks for a human.", "The question can't be answered from knowledge_base."],
+    handoff_instruction: "Give them the contact email when handing off.",
+    example_handoff_response: "Let me connect you with the team: hello@example.com",
+  },
+  example_exchanges: [{ user: "hi", assistant: "Hello! How can I help you today?" }],
+};
+
+class FakeAiProvider implements AIProvider {
+  public calls: ChatCompleteInput[] = [];
+
+  constructor(private readonly makeResult: (input: ChatCompleteInput) => ChatCompleteResult) {}
+
+  async chatComplete(input: ChatCompleteInput): Promise<ChatCompleteResult> {
+    this.calls.push(input);
+    return this.makeResult(input);
+  }
+
+  async visionAnalyze(_input: VisionAnalyzeInput): Promise<VisionAnalyzeResult> {
+    throw new Error("FakeAiProvider.visionAnalyze is not implemented — not needed by these tests");
+  }
+
+  async embed(_input: EmbedInput): Promise<EmbedResult> {
+    throw new Error("FakeAiProvider.embed is not implemented — not needed by these tests");
+  }
+}
+
+export type { FakeAiProvider };
+
+/** An AI provider fake that always returns the same well-formed JSON answer. */
+export function fakeAiProviderAnswering(answer: string, escalate = false): FakeAiProvider {
+  return new FakeAiProvider(() => ({ text: JSON.stringify({ answer, escalate }) }));
+}
+
+/** An AI provider fake driven by a callback, for asserting on the prompt it was sent. */
+export function fakeAiProviderWith(makeResult: (input: ChatCompleteInput) => ChatCompleteResult): FakeAiProvider {
+  return new FakeAiProvider(makeResult);
+}
 
 class RecordingCalendarProvider implements CalendarProvider {
   public createBookingCalls: CreateBookingInput[] = [];

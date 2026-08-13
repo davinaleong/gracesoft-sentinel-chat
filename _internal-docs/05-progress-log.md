@@ -4,6 +4,26 @@ Companion to `01-milestone-checklist.md`. One entry per work session, newest fir
 
 ---
 
+## 2026-08-13 — Milestone 2 addendum: FAQ matcher redesigned to be LLM-grounded
+
+**Status:** Complete. Supersedes the "no `AIProvider` import" decision note in the entry below.
+
+**Why:** real FAQ content arrived (`_internal-docs/data/faq-blueprint.json`, GraceSoft's own site content) and it isn't a Q&A list — it's explicitly structured as grounding context for an LLM (`system_prompt`, `knowledge_base`, `guardrails`, `escalation_policy`, `example_exchanges`), with its own schema comment stating it should be "fed as the system prompt / retrieval context rather than as a trigger-phrase lookup table". The keyword/Jaccard matcher built in the original Milestone 2 pass couldn't consume this shape at all. Asked the user how to reconcile it; chose to switch FAQ matching to be fully LLM-grounded rather than keep the deterministic matcher or run a hybrid.
+
+**What changed:**
+- `faq-matcher.ts` — replaced `matchFaq`/`FaqEntry`/Jaccard similarity entirely with `answerFaq(text, blueprint, aiProvider)`, which builds a system prompt from the blueprint (`system_prompt` + `knowledge_base` + `guardrails` + `escalation_policy` + `example_exchanges` as style-only illustrations), calls `AIProvider.chatComplete`, and parses a `{"answer": string, "escalate": boolean}` JSON response — falling back to raw text (and, if empty, the blueprint's own handoff message) if the model doesn't comply with the requested shape. `FaqGroundingBlueprint` is the new business-owned content type (mirrors the real JSON's structure, minus fields the runtime doesn't need).
+- `handle-message.ts` — `agent-concierge` now takes an `aiProvider: AIProvider` input and routes FAQ questions through `answerFaq`; escalation is now something the model decides (via the `escalate` flag) rather than a confidence threshold we compute.
+- **New: AI disclosure enforcement.** The blueprint's `ai_disclosure` block (`required: true`) is a compliance requirement, not a style note — the chatter must be told they're talking to an AI at the start of every new conversation. Implemented as a `withAiDisclosure` wrapper around `handleMessage` that prepends `ai_disclosure.opening_message` to the *first* response of any kind in a session (booking or FAQ) and sets `context.aiDisclosed`, so it fires exactly once per session regardless of which path answers the first message.
+- Rewrote `faq-matcher.test.ts` (now tests `answerFaq`'s JSON-parsing/fallback behavior and asserts the system prompt is actually grounded in the blueprint's content) and `handle-message.test.ts`'s FAQ + new AI-disclosure scenarios against a `FakeAiProvider` in `test-support.ts` (records calls, returns a scripted or callback-driven `ChatCompleteResult`).
+
+**Verified locally (all green):** `pnpm typecheck`, `pnpm lint`, `pnpm boundaries` (0 violations), `pnpm build`, `pnpm test` (65/65 in `agent-concierge`, up from 62 — added disclosure tests). No live network calls in any test.
+
+**Nothing deferred to the user** — no new accounts/credentials needed; `AIProvider` is still just an interface here, real wiring is Milestone 4.
+
+**Next:** Milestone 3 — Cook Agent Core (`agent-cook`), using the legacy implementation found at `../gracesoft-sentinel-whatsapp/packages/cook` as the extraction source.
+
+---
+
 ## 2026-08-13 — Milestone 2: Concierge Agent Core (`agent-concierge`)
 
 **Status:** Complete.
@@ -19,6 +39,7 @@ Companion to `01-milestone-checklist.md`. One entry per work session, newest fir
 
 **Decisions made without a stop-and-ask (low-stakes/reversible, flagged here for visibility):**
 - The Milestone 2 deliverable list mentions wiring to `AIProvider`, but neither FAQ matching (Jaccard keyword-overlap) nor booking-intent parsing (regex-based) call an LLM — both are deterministic by design (see the "not an LLM call" comments already in `faq-matcher.ts`/`booking-intent.ts` from the prior session). So `agent-concierge` currently has no `AIProvider` import at all; `CalendarProvider` is the only external interface it consumes. This isn't a deviation so much as the interface simply not being needed yet — revisit only if a future requirement (e.g. free-form NLU) needs it.
+  - **Superseded same day:** see the addendum entry above — real FAQ content turned out to require LLM grounding, so `agent-concierge` does now import `AIProvider`. Booking-intent parsing remains deterministic; that part of this note still stands.
 
 **Nothing deferred to the user for this milestone** — no external accounts/credentials were needed.
 

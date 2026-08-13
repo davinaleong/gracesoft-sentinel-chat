@@ -2,8 +2,8 @@ export { handleMessage } from "./handle-message.js";
 export type { ConciergeHandleMessageInput, ConciergeHandleMessageResult } from "./handle-message.js";
 export { parseBookingRequest } from "./booking-intent.js";
 export type { ParsedBookingRequest } from "./booking-intent.js";
-export { matchFaq, DEFAULT_FAQ_CONFIDENCE_THRESHOLD } from "./faq-matcher.js";
-export type { FaqEntry, FaqMatchResult } from "./faq-matcher.js";
+export { answerFaq } from "./faq-matcher.js";
+export type { FaqGroundingBlueprint, FaqAnswerResult } from "./faq-matcher.js";
 export {
   findNextAvailableSlots,
   isSlotAvailable,
