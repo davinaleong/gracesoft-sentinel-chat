@@ -63,6 +63,16 @@ services:
       postgres:
         condition: service_healthy
 
+  legal-site:
+    build:
+      context: .
+      dockerfile: apps/legal-site/Dockerfile
+    ports:
+      - "3002:3002"
+    # Deliberately no depends_on redis/postgres, and no shared network
+    # dependency on concierge-service/cook-service — this must stay up
+    # independently of either service (test-checklist §5).
+
 volumes:
   redis-data:
   postgres-data:

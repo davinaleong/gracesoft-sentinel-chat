@@ -223,8 +223,8 @@ Give each agent (Concierge, Cook) its own publicly reachable Privacy Policy and 
 * [x] Draft Cook Terms & Conditions
 * [x] Add effective-date/version field to each document
 * [x] Scaffold `packages/legal-concierge` and `packages/legal-cook` content packages
-* [ ] Scaffold `apps/legal-site` and wire it to render both packages at their public routes — **not started**, see progress log
-* [ ] Deploy `legal-site` to its own subdomain, independent of `concierge-service` / `cook-service` — blocked on the above
+* [x] Scaffold `apps/legal-site` and wire it to render both packages at their public routes
+* [ ] Deploy `legal-site` to its own subdomain, independent of `concierge-service` / `cook-service` — `Dockerfile` + `docker-compose.yml` entry exist and are structurally correct (no dependency on the other two services' containers), but an actual live subdomain deploy needs hosting the user provides
 * [ ] Submit Privacy Policy URL as part of WhatsApp Business verification/App Review for each agent — blocked on a live deploy + a real WhatsApp Business account; needs the user
 * [ ] Add Privacy Policy link to Telegram bot bio / `/start` response for each agent — blocked on a live deploy + a real Telegram bot; needs the user
 * [x] Confirm PDPA-required notice elements are present (what's collected, purpose, retention, contact for data requests) — automated keyword checks in `legal-content.test.ts`; full legal sufficiency still needs human review (content is explicitly marked DRAFT)

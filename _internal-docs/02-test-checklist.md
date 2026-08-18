@@ -130,16 +130,16 @@ Using Promptfoo (or equivalent) against real or near-real prompts, plus manual c
 Covers `packages/legal-concierge`, `packages/legal-cook`, and `apps/legal-site`.
 
 ### Content correctness
-* [ ] Concierge Privacy Policy is served at its route and matches the current `packages/legal-concierge` content — blocked: `apps/legal-site` not built yet
-* [ ] Concierge T&C is served at its route and matches the current `packages/legal-concierge` content — blocked: `apps/legal-site` not built yet
-* [ ] Cook Privacy Policy is served at its route and matches the current `packages/legal-cook` content — blocked: `apps/legal-site` not built yet
-* [ ] Cook T&C is served at its route and matches the current `packages/legal-cook` content — blocked: `apps/legal-site` not built yet
-* [ ] No cross-contamination — Cook's routes never render Concierge's content or vice versa — blocked: `apps/legal-site` not built yet
-* [x] Effective date / version string is present and renders correctly — verified at the content-package level (`legal-content.test.ts` parses both fields out of each document); "renders on every page" still pending `legal-site`
+* [x] Concierge Privacy Policy is served at its route and matches the current `packages/legal-concierge` content
+* [x] Concierge T&C is served at its route and matches the current `packages/legal-concierge` content
+* [x] Cook Privacy Policy is served at its route and matches the current `packages/legal-cook` content
+* [x] Cook T&C is served at its route and matches the current `packages/legal-cook` content
+* [x] No cross-contamination — Cook's routes never render Concierge's content or vice versa
+* [x] Effective date / version string is present and renders correctly on every page
 
 ### Reachability & platform requirements
-* [ ] Each policy URL returns 200 and renders without requiring auth (Meta/Telegram must be able to fetch it unauthenticated) — blocked: `apps/legal-site` not built yet
-* [ ] `legal-site` deploy is independent of `concierge-service`/`cook-service` — taking a service down does not take the legal pages down — blocked: not built/deployed yet
+* [x] Each policy URL returns 200 and renders without requiring auth (Meta/Telegram must be able to fetch it unauthenticated) — no auth middleware exists on `legal-site` at all; verified via a real `fetch` with no credentials in `server.test.ts`
+* [x] `legal-site` deploy is independent of `concierge-service`/`cook-service` — taking a service down does not take the legal pages down — structurally true (own `Dockerfile`, own `docker-compose.yml` service with no shared `depends_on`); not exercised against an actual running deploy
 * [ ] WhatsApp Business verification/App Review accepts the submitted Privacy Policy URL for each agent — needs a live URL + a real WhatsApp Business account; needs the user
 * [ ] Telegram bot bio / `/start` response link resolves to the correct agent-specific policy page — needs a live URL + a real Telegram bot; needs the user
 

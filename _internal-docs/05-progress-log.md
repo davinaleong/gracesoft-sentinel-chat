@@ -4,6 +4,28 @@ Companion to `01-milestone-checklist.md`. One entry per work session, newest fir
 
 ---
 
+## 2026-08-13 — Milestone 9: `apps/legal-site` (serving layer)
+
+**Status:** Complete except the two items that need a live deploy + real WhatsApp Business/Telegram accounts (see below — same blockers already flagged in the previous entry, now the only ones left in this milestone).
+
+**What was built:**
+- `render.ts` — `renderLegalPage(title, doc)`: wraps a `LegalDocument`'s markdown (via `marked`) into a minimal, dependency-free HTML page — no client-side JS, so nothing can stop Meta's or Telegram's verification crawlers (or a human on a slow connection) from reading it. Escapes the title against HTML injection.
+- `server.ts` — `buildServer()`: `/health` plus the four routes the milestone's deliverables specify (`/concierge/privacy`, `/concierge/terms`, `/cook/privacy`, `/cook/terms`), each rendering straight from `@gracesoft-sentinel/legal-concierge`/`@gracesoft-sentinel/legal-cook` — no auth middleware anywhere, since these must be fetchable unauthenticated.
+- `env.ts`/`index.ts` — same Zod-env-then-listen shape as the other two apps, minimal here since there's nothing to configure beyond `PORT`.
+- `Dockerfile` + a `legal-site` service added to `docker-compose.yml`, deliberately with **no** `depends_on` linking it to `redis`/`postgres`/the other two services — the whole point of a separate app is that taking `concierge-service` or `cook-service` down must never take the legal pages down with it.
+
+**Verified locally (all green):** `pnpm lint`, `pnpm typecheck`, `pnpm boundaries` (0 violations, 371 modules/775 dependencies), `pnpm build`, `pnpm test` — 16 new tests in `legal-site` (288 total workspace-wide, 291 with the 3 root integration tests), including a real end-to-end HTTP test (`server.test.ts`, same `http.createServer` + real `fetch` pattern used for the channel webhook routers) that: hits all four routes unauthenticated and checks 200 + `text/html`, confirms each route's content matches what its content package actually contains (effective date, version, and agent name), and — the one explicitly called out in the test checklist — confirms neither agent's routes ever leak the other's content ("Sentinel Cook"/"dish photo" never appear on Concierge's pages, "Sentinel Concierge"/"booking" never appear on Cook's).
+
+**What's still blocked, unchanged from the previous entry:**
+- Deploying `legal-site` to an actual live subdomain — the Dockerfile/compose config are structurally ready, but this needs hosting the user provides.
+- Submitting the live Privacy Policy URL to WhatsApp Business verification, and linking it from a real Telegram bot's bio/`/start` — both need a live URL plus real WhatsApp Business/Telegram accounts.
+
+**Deferred to the user:** the two items above, plus the still-outstanding qualified-legal-review flag on the DRAFT content from the previous entry.
+
+**Milestone 9 is otherwise complete.** Next: Milestone 10 — Hardening & Production Readiness.
+
+---
+
 ## 2026-08-13 — Milestone 9 (partial): Legal & Compliance content packages
 
 **Status:** Partial — content and packages done, `apps/legal-site` (the serving layer) not started, and everything requiring a live deployment or a real account is necessarily out of reach here. Stopped mid-milestone at the user's request to document and commit before continuing.
