@@ -1,7 +1,8 @@
 import type { AIProvider, ConversationState, NormalizedMessage, NormalizedResponse } from "@gracesoft-sentinel/core";
 import { classifyDish } from "./dish-classifier.js";
 import { isDietaryAdjustmentRequest } from "./dietary-adjustment.js";
-import { formatRecipe, formatUnidentifiedDish } from "./formatter.js";
+import { formatGroceryList, formatRecipe, formatUnidentifiedDish } from "./formatter.js";
+import { generateGroceryList, isGroceryListRequest } from "./grocery-list.js";
 import { generateRecipe, type Recipe } from "./recipe-generator.js";
 
 export interface CookHandleMessageInput {
@@ -19,8 +20,12 @@ export interface CookHandleMessageResult {
 export interface CookContext {
   awaitingPhoto?: boolean;
   lastRecipe?: Recipe;
+  /** Recipes from this session, most recent last — the source material for a grocery list / meal plan. */
+  recentRecipes?: Recipe[];
   [key: string]: unknown;
 }
+
+const MAX_RECENT_RECIPES = 7; // a week's worth
 
 const PROMPT_FOR_PHOTO =
   "Cook is ready! Send me a photo of any dish and I'll give you the dish name, " +
@@ -32,8 +37,20 @@ const ANALYSIS_FAILED = "Sorry, I couldn't analyse that photo right now. Please 
 
 const VOICE_NOTE_FAILED = "Sorry, I couldn't process that voice note. Please try typing instead, or send a dish photo.";
 
+const GROCERY_LIST_FAILED = "Sorry, I couldn't put that grocery list together right now. Please try again in a moment.";
+
 function withContext(state: ConversationState, context: CookContext): ConversationState {
   return { ...state, context, updatedAt: new Date().toISOString() };
+}
+
+function appendRecentRecipe(recentRecipes: Recipe[] | undefined, recipe: Recipe): Recipe[] {
+  return [...(recentRecipes ?? []), recipe].slice(-MAX_RECENT_RECIPES);
+}
+
+/** A dietary-adjustment replaces the last entry (same dish, adjusted) rather than adding a second one. */
+function replaceLastRecentRecipe(recentRecipes: Recipe[] | undefined, recipe: Recipe): Recipe[] {
+  const withoutLast = recentRecipes && recentRecipes.length > 0 ? recentRecipes.slice(0, -1) : [];
+  return [...withoutLast, recipe].slice(-MAX_RECENT_RECIPES);
 }
 
 /**
@@ -53,6 +70,7 @@ async function resolveVoiceNoteText(message: NormalizedMessage, aiProvider: AIPr
 async function handlePhoto(
   imageUrl: string,
   aiProvider: AIProvider,
+  context: CookContext,
   state: ConversationState
 ): Promise<CookHandleMessageResult> {
   try {
@@ -65,7 +83,10 @@ async function handlePhoto(
     if (!recipe) {
       return { response: { text: ANALYSIS_FAILED }, state: withContext(state, {}) };
     }
-    return { response: { text: formatRecipe(recipe) }, state: withContext(state, { lastRecipe: recipe }) };
+    return {
+      response: { text: formatRecipe(recipe) },
+      state: withContext(state, { lastRecipe: recipe, recentRecipes: appendRecentRecipe(context.recentRecipes, recipe) }),
+    };
   } catch {
     return { response: { text: ANALYSIS_FAILED }, state: withContext(state, {}) };
   }
@@ -75,6 +96,7 @@ async function handleDietaryAdjustment(
   text: string,
   baseRecipe: Recipe,
   aiProvider: AIProvider,
+  context: CookContext,
   state: ConversationState
 ): Promise<CookHandleMessageResult> {
   try {
@@ -87,9 +109,30 @@ async function handleDietaryAdjustment(
     if (!recipe) {
       return { response: { text: ANALYSIS_FAILED }, state: withContext(state, { lastRecipe: baseRecipe }) };
     }
-    return { response: { text: formatRecipe(recipe) }, state: withContext(state, { lastRecipe: recipe }) };
+    return {
+      response: { text: formatRecipe(recipe) },
+      state: withContext(state, { lastRecipe: recipe, recentRecipes: replaceLastRecentRecipe(context.recentRecipes, recipe) }),
+    };
   } catch {
     return { response: { text: ANALYSIS_FAILED }, state: withContext(state, { lastRecipe: baseRecipe }) };
+  }
+}
+
+async function handleGroceryListRequest(
+  recentRecipes: Recipe[],
+  aiProvider: AIProvider,
+  context: CookContext,
+  state: ConversationState
+): Promise<CookHandleMessageResult> {
+  try {
+    const items = await generateGroceryList(recentRecipes, aiProvider);
+    if (!items) {
+      return { response: { text: GROCERY_LIST_FAILED }, state: withContext(state, context) };
+    }
+    const dishNames = recentRecipes.map((r) => r.dishName);
+    return { response: { text: formatGroceryList(items, dishNames) }, state: withContext(state, context) };
+  } catch {
+    return { response: { text: GROCERY_LIST_FAILED }, state: withContext(state, context) };
   }
 }
 
@@ -97,8 +140,9 @@ async function handleDietaryAdjustment(
  * Cook's entry point — accepts image or text input. A photo always wins
  * (a fresh dish photo takes priority over any lingering dietary-adjustment
  * or awaiting-photo state); otherwise text is checked for a dietary
- * adjustment against the last recipe, then falls back to prompting for a
- * photo.
+ * adjustment against the last recipe, then a grocery-list/meal-plan
+ * request against this session's recent recipes, then falls back to
+ * prompting for a photo.
  */
 export async function handleMessage(input: CookHandleMessageInput): Promise<CookHandleMessageResult> {
   const { message, aiProvider, state } = input;
@@ -106,7 +150,7 @@ export async function handleMessage(input: CookHandleMessageInput): Promise<Cook
   const image = message.media?.find((m) => m.type === "image" && m.url);
 
   if (image?.url) {
-    return handlePhoto(image.url, aiProvider, state);
+    return handlePhoto(image.url, aiProvider, context, state);
   }
 
   let text: string;
@@ -118,7 +162,11 @@ export async function handleMessage(input: CookHandleMessageInput): Promise<Cook
   }
 
   if (context.lastRecipe && isDietaryAdjustmentRequest(text)) {
-    return handleDietaryAdjustment(text, context.lastRecipe, aiProvider, state);
+    return handleDietaryAdjustment(text, context.lastRecipe, aiProvider, context, state);
+  }
+
+  if (context.recentRecipes && context.recentRecipes.length > 0 && isGroceryListRequest(text)) {
+    return handleGroceryListRequest(context.recentRecipes, aiProvider, context, state);
   }
 
   if (!context.awaitingPhoto) {

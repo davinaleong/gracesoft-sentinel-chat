@@ -157,6 +157,88 @@ describe("handleMessage — dietary adjustment", () => {
   });
 });
 
+describe("handleMessage — grocery list / meal plan", () => {
+  it("accumulates recentRecipes across successive photo messages, capped at 7", async () => {
+    let state = makeState();
+    const aiProvider = fakeAiProviderHappyPath();
+    for (let i = 0; i < 9; i++) {
+      const result = await handleMessage({ message: photoMessage(), state, aiProvider });
+      state = result.state;
+    }
+    expect((state.context as CookContext).recentRecipes).toHaveLength(7);
+  });
+
+  it("a grocery-list request combines recent recipes' ingredients into a consolidated list", async () => {
+    const recentRecipes = [
+      {
+        dishName: "Chicken Rice",
+        servings: 2,
+        ingredients: ["2 chicken thighs", "2 cloves garlic"],
+        steps: ["Cook."],
+        substitutions: [],
+        servingSuggestions: [],
+        nutrition: { calories: 550, protein: "35g", carbohydrates: "60g", fat: "15g", fiber: "2g" },
+      },
+      {
+        dishName: "Laksa",
+        servings: 2,
+        ingredients: ["laksa paste", "2 cloves garlic"],
+        steps: ["Cook."],
+        substitutions: [],
+        servingSuggestions: [],
+        nutrition: { calories: 620, protein: "20g", carbohydrates: "70g", fat: "28g", fiber: "3g" },
+      },
+    ];
+    const consolidatedJson = JSON.stringify({ items: ["2 chicken thighs", "4 cloves garlic", "laksa paste"] });
+    const aiProvider = fakeAiProviderWith(
+      () => ({ text: consolidatedJson }),
+      () => ({ text: "unused" })
+    );
+
+    const result = await handleMessage({
+      message: makeMessage({ text: "can you give me a grocery list for these?" }),
+      state: makeState({ recentRecipes }),
+      aiProvider,
+    });
+
+    expect(result.response.text).toContain("Chicken Rice, Laksa");
+    expect(result.response.text).toContain("- 4 cloves garlic");
+  });
+
+  it("a grocery-list request with no recent recipes falls through to prompting for a photo instead", async () => {
+    const result = await handleMessage({
+      message: makeMessage({ text: "give me a grocery list" }),
+      state: makeState(),
+      aiProvider: fakeAiProviderHappyPath(),
+    });
+    expect(result.response.text).toMatch(/send me a photo/i);
+  });
+
+  it("degrades gracefully, without a silent failure, when grocery-list generation fails", async () => {
+    const recentRecipes = [
+      {
+        dishName: "Chicken Rice",
+        servings: 2,
+        ingredients: ["chicken"],
+        steps: ["Cook."],
+        substitutions: [],
+        servingSuggestions: [],
+        nutrition: { calories: 550, protein: "35g", carbohydrates: "60g", fat: "15g", fiber: "2g" },
+      },
+    ];
+    const aiProvider = fakeAiProviderWith(
+      () => ({ text: "not json" }),
+      () => ({ text: "unused" })
+    );
+    const result = await handleMessage({
+      message: makeMessage({ text: "shopping list please" }),
+      state: makeState({ recentRecipes }),
+      aiProvider,
+    });
+    expect(result.response.text).toMatch(/couldn't put that grocery list together/i);
+  });
+});
+
 describe("handleMessage — voice notes", () => {
   function voiceMessage(url = "https://example.com/voice-note.ogg"): NormalizedMessage {
     return makeMessage({ media: [{ type: "audio", url }] });

@@ -5,4 +5,5 @@ export type { DishClassification } from "./dish-classifier.js";
 export { generateRecipe } from "./recipe-generator.js";
 export type { Recipe, RecipeNutrition } from "./recipe-generator.js";
 export { isDietaryAdjustmentRequest } from "./dietary-adjustment.js";
-export { formatRecipe, formatUnidentifiedDish } from "./formatter.js";
+export { isGroceryListRequest, generateGroceryList } from "./grocery-list.js";
+export { formatRecipe, formatUnidentifiedDish, formatGroceryList } from "./formatter.js";

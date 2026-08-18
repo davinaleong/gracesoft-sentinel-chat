@@ -4,6 +4,23 @@ Companion to `01-milestone-checklist.md`. One entry per work session, newest fir
 
 ---
 
+## 2026-08-13 — Milestone 11 (4/6): Meal planning / grocery list generation (Cook)
+
+**Status:** Four of six optional/future items done.
+
+**What was built:** entirely within `agent-cook` — no core interface change this time, unlike the last two items.
+- `CookContext` gained `recentRecipes?: Recipe[]` alongside the existing `lastRecipe` — every successfully identified dish photo appends to it (capped at 7, a week's worth), and a dietary adjustment *replaces* the last entry rather than adding a second one (it's still the same dish, just modified — counting it twice in a grocery list would double the ingredients).
+- `grocery-list.ts` — `isGroceryListRequest()` (deterministic keyword match: "grocery list", "shopping list", "what do I need to buy", "meal plan" — same philosophy as `dietary-adjustment.ts`), and `generateGroceryList(recipes, aiProvider)` which sends all the accumulated recipes' ingredient lists to `AIProvider.chatComplete` for consolidation. This one genuinely needs an LLM rather than a deterministic string-dedupe: combining "2 cloves garlic" from one recipe with "2 cloves garlic" from another into "4 cloves garlic" is a natural-language quantity-merging task, not a set operation. Carries the same prompt-injection guard pattern established in Milestone 10 (recipe names/ingredients are untrusted user-sourced input, not instructions).
+- `handleMessage`'s branch order: photo (always wins) → voice-note transcription → dietary adjustment (if `lastRecipe` exists) → **grocery list (if `recentRecipes` is non-empty)** → prompt-for-photo fallback. A grocery-list request with no recent recipes falls through to the ordinary "send me a photo" prompt rather than a confusing empty list.
+
+**Verified locally (all green):** `pnpm lint`, `pnpm typecheck`, `pnpm boundaries` (0 violations, 440 modules/933 dependencies), `pnpm build`, `pnpm test` — 10 new tests (accumulation-and-cap across successive photos, consolidation request-shaping, empty-recipes fallback, graceful failure), 362/362 workspace-wide (365 with the 3 root integration tests).
+
+**Nothing deferred to the user for this item** — no live AI provider credentials were needed or used.
+
+**Next:** multi-tenant `BusinessConfig` and the Mother's Day Edition (Drive + RAG) — the last two Milestone 11 items.
+
+---
+
 ## 2026-08-13 — Milestone 11 (3/6): Voice note input handling
 
 **Status:** Three of six optional/future items done.

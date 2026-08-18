@@ -51,3 +51,11 @@ export function formatRecipe(recipe: Recipe): string {
 
   return lines.join("\n");
 }
+
+export function formatGroceryList(items: string[], dishNames: string[]): string {
+  return [
+    `Grocery list for ${dishNames.join(", ")}:`,
+    "",
+    items.map((item) => `- ${item}`).join("\n"),
+  ].join("\n");
+}

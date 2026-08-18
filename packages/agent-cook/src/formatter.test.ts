@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { formatRecipe, formatUnidentifiedDish } from "./formatter.js";
+import { formatGroceryList, formatRecipe, formatUnidentifiedDish } from "./formatter.js";
 import type { Recipe } from "./recipe-generator.js";
 
 const RECIPE: Recipe = {
@@ -57,5 +57,14 @@ describe("formatUnidentifiedDish", () => {
   it("omits the note line when there isn't one", () => {
     const text = formatUnidentifiedDish({ dishName: null });
     expect(text).not.toContain("undefined");
+  });
+});
+
+describe("formatGroceryList", () => {
+  it("lists the dish names and each item as a bullet", () => {
+    const text = formatGroceryList(["2 chicken thighs", "4 cloves garlic"], ["Chicken Rice", "Laksa"]);
+    expect(text).toContain("Chicken Rice, Laksa");
+    expect(text).toContain("- 2 chicken thighs");
+    expect(text).toContain("- 4 cloves garlic");
   });
 });
