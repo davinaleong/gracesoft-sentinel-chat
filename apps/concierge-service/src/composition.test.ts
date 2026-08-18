@@ -1,6 +1,8 @@
-import { dirname, resolve } from "node:path";
+import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
-import { describe, expect, it } from "vitest";
+import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { buildComposition } from "./composition.js";
 import type { ConciergeServiceEnv } from "./env.js";
 
@@ -38,5 +40,31 @@ describe("buildComposition — concierge-service", () => {
 
   it("throws a clear error when BUSINESS_CONFIG_PATH points at a nonexistent file", () => {
     expect(() => buildComposition({ ...env, BUSINESS_CONFIG_PATH: "./does-not-exist.json" })).toThrow();
+  });
+
+  describe("multi-tenant (BUSINESS_CONFIGS_DIR)", () => {
+    let dir: string;
+
+    beforeEach(() => {
+      dir = mkdtempSync(join(tmpdir(), "concierge-service-composition-test-"));
+      mkdirSync(join(dir, "faq-blueprints"));
+      const exampleConfig = JSON.parse(readFileSync(resolve(here, "../../../_internal-docs/data/business-config.example.json"), "utf-8"));
+      const exampleFaq = readFileSync(resolve(here, "../../../_internal-docs/data/faq-blueprint.json"), "utf-8");
+      writeFileSync(join(dir, "faq-blueprints", "biz-a.json"), exampleFaq);
+      writeFileSync(
+        join(dir, "1234567890.json"),
+        JSON.stringify({ ...exampleConfig, businessId: "biz-a", faqBlueprintPath: "./faq-blueprints/biz-a.json" })
+      );
+    });
+
+    afterEach(() => {
+      rmSync(dir, { recursive: true, force: true });
+    });
+
+    it("wires up successfully from a directory of per-business config files instead of a single BUSINESS_CONFIG_PATH", () => {
+      const { BUSINESS_CONFIG_PATH: _drop, ...rest } = env;
+      const composition = buildComposition({ ...rest, BUSINESS_CONFIGS_DIR: dir });
+      expect(composition.onMessage).toBeInstanceOf(Function);
+    });
   });
 });

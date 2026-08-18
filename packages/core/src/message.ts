@@ -32,6 +32,16 @@ export const NormalizedMessageSchema = z.object({
   media: z.array(NormalizedMediaSchema).optional(),
   /** id of a quick-reply/button/list item the sender tapped, if any. */
   quickReplyId: z.string().optional(),
+  /**
+   * Which of the *business's own* channel identities received this message
+   * (e.g. a WhatsApp `phone_number_id`, a Twilio `To` number) — not to be
+   * confused with `ChannelAdapter.formatOutbound`'s `recipientId`, which is
+   * the opposite direction (the customer's id to reply *to*). Lets a single
+   * deployment resolve which tenant/`BusinessConfig` a message belongs to.
+   * Undefined where the channel has no such concept (e.g. a Telegram bot's
+   * identity is implicit in its webhook URL, not the payload).
+   */
+  businessChannelId: z.string().optional(),
   /** Untouched source payload, for channel-specific edge cases and debugging. */
   raw: z.unknown(),
 });

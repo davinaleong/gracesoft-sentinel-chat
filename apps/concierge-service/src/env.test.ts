@@ -47,6 +47,25 @@ describe("loadEnv", () => {
     ).toThrow(/Invalid concierge-service environment configuration/);
   });
 
+  it("throws when neither BUSINESS_CONFIG_PATH nor BUSINESS_CONFIGS_DIR is set", () => {
+    const { BUSINESS_CONFIG_PATH: _drop, ...rest } = BASE_ENV;
+    expect(() =>
+      loadEnv({ ...rest, TELEGRAM_ENABLED: "true", TELEGRAM_BOT_TOKEN: "t", TELEGRAM_WEBHOOK_SECRET: "s" } as unknown as NodeJS.ProcessEnv)
+    ).toThrow(/BUSINESS_CONFIG_PATH or BUSINESS_CONFIGS_DIR/);
+  });
+
+  it("loads successfully with only BUSINESS_CONFIGS_DIR set (multi-tenant mode)", () => {
+    const { BUSINESS_CONFIG_PATH: _drop, ...rest } = BASE_ENV;
+    const env = loadEnv({
+      ...rest,
+      BUSINESS_CONFIGS_DIR: "./business-configs",
+      TELEGRAM_ENABLED: "true",
+      TELEGRAM_BOT_TOKEN: "t",
+      TELEGRAM_WEBHOOK_SECRET: "s",
+    } as unknown as NodeJS.ProcessEnv);
+    expect(env.BUSINESS_CONFIGS_DIR).toBe("./business-configs");
+  });
+
   it("respects a custom PORT", () => {
     const env = loadEnv({
       ...BASE_ENV,

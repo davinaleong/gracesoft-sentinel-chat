@@ -1,4 +1,4 @@
-import { readFileSync } from "node:fs";
+import { readdirSync, readFileSync } from "node:fs";
 import { dirname, resolve } from "node:path";
 import { BusinessConfigSchema, type BusinessConfig } from "@gracesoft-sentinel/core";
 import type { FaqGroundingBlueprint } from "@gracesoft-sentinel/agent-concierge";
@@ -18,4 +18,34 @@ export function loadBusinessConfig(path: string): BusinessConfig {
 export function loadFaqBlueprint(businessConfigPath: string, businessConfig: BusinessConfig): FaqGroundingBlueprint {
   const faqPath = resolve(dirname(businessConfigPath), businessConfig.faqBlueprintPath);
   return JSON.parse(readFileSync(faqPath, "utf-8")) as FaqGroundingBlueprint;
+}
+
+export interface TenantConfig {
+  businessConfig: BusinessConfig;
+  faqBlueprint: FaqGroundingBlueprint;
+}
+
+/**
+ * Multi-tenant loader: reads every `<businessChannelId>.json` file directly
+ * inside `dir` (e.g. `1234567890.json` for a WhatsApp `phone_number_id`, or
+ * `+18885550000.json` for a Twilio number) and keys each business's config
+ * by that filename stem — the same value `NormalizedMessage.businessChannelId`
+ * carries at message time, so resolution is a plain map lookup.
+ *
+ * `readdirSync` here is non-recursive, so each business's FAQ blueprint must
+ * live in a nested subdirectory (e.g. `faqBlueprintPath: "./faq-blueprints/biz-a.json"`)
+ * rather than directly inside `dir` — otherwise it would itself be read as a
+ * (malformed) BusinessConfig file and fail validation.
+ */
+export function loadBusinessConfigRegistry(dir: string): Map<string, TenantConfig> {
+  const registry = new Map<string, TenantConfig>();
+  for (const file of readdirSync(dir)) {
+    if (!file.endsWith(".json")) continue;
+    const path = resolve(dir, file);
+    const businessConfig = loadBusinessConfig(path);
+    const faqBlueprint = loadFaqBlueprint(path, businessConfig);
+    const businessChannelId = file.slice(0, -".json".length);
+    registry.set(businessChannelId, { businessConfig, faqBlueprint });
+  }
+  return registry;
 }

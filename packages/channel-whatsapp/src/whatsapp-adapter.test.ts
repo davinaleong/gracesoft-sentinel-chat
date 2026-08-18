@@ -47,6 +47,7 @@ describe("WhatsAppChannelAdapter.parseInbound — text", () => {
     expect(message.text).toBe("Hi there");
     expect(message.channel).toBe("whatsapp");
     expect(message.timestamp).toBe(new Date(1746000000 * 1000).toISOString());
+    expect(message.businessChannelId).toBe("1234567890");
   });
 
   it("throws a clear error for a status-update payload with no message", async () => {

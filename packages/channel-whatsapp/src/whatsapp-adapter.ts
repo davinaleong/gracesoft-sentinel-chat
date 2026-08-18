@@ -51,6 +51,7 @@ export class WhatsAppChannelAdapter implements ChannelAdapter {
     if (!message) {
       throw new Error("WhatsAppChannelAdapter.parseInbound: payload contains no message (likely a status update)");
     }
+    const businessChannelId = (payload as WhatsAppWebhookPayload)?.entry?.[0]?.changes?.[0]?.value?.metadata?.phone_number_id;
 
     let text: string | undefined;
     let quickReplyId: string | undefined;
@@ -82,6 +83,7 @@ export class WhatsAppChannelAdapter implements ChannelAdapter {
       text,
       media,
       quickReplyId,
+      businessChannelId,
       raw: payload,
     };
   }

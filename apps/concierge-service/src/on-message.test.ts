@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
-import type { BusinessConfig, NormalizedMessage } from "@gracesoft-sentinel/core";
+import type { BusinessConfig, CalendarProvider, NormalizedMessage } from "@gracesoft-sentinel/core";
 import type { FaqGroundingBlueprint } from "@gracesoft-sentinel/agent-concierge";
-import { createOnMessageHandler } from "./on-message.js";
+import { createOnMessageHandler, type TenantContext } from "./on-message.js";
 import { FakeAiProvider, FakeCalendarProvider, FakeConversationLogger, FakeSessionStore, createSilentTestLogger } from "./test-support.js";
 
 const BUSINESS_CONFIG: BusinessConfig = {
@@ -32,6 +32,11 @@ const FAQ_BLUEPRINT: FaqGroundingBlueprint = {
   escalation_policy: { conditions: [], handoff_instruction: "", example_handoff_response: "" },
 };
 
+function singleTenant(calendarProvider: CalendarProvider = new FakeCalendarProvider()): () => TenantContext {
+  const tenant: TenantContext = { businessConfig: BUSINESS_CONFIG, faqBlueprint: FAQ_BLUEPRINT, calendarProvider };
+  return () => tenant;
+}
+
 function makeMessage(overrides: Partial<NormalizedMessage> = {}): NormalizedMessage {
   return {
     id: "msg-1",
@@ -47,9 +52,7 @@ describe("createOnMessageHandler", () => {
   it("creates a fresh session on first contact and persists it back to the store", async () => {
     const sessionStore = new FakeSessionStore();
     const onMessage = createOnMessageHandler({
-      businessConfig: BUSINESS_CONFIG,
-      faqBlueprint: FAQ_BLUEPRINT,
-      calendarProvider: new FakeCalendarProvider(),
+      resolveTenant: singleTenant(),
       aiProvider: new FakeAiProvider(),
       sessionStore,
       conversationLogger: new FakeConversationLogger(),
@@ -67,9 +70,7 @@ describe("createOnMessageHandler", () => {
     const sessionStore = new FakeSessionStore();
     const calendarProvider = new FakeCalendarProvider();
     const onMessage = createOnMessageHandler({
-      businessConfig: BUSINESS_CONFIG,
-      faqBlueprint: FAQ_BLUEPRINT,
-      calendarProvider,
+      resolveTenant: singleTenant(calendarProvider),
       aiProvider: new FakeAiProvider(),
       sessionStore,
       conversationLogger: new FakeConversationLogger(),
@@ -86,9 +87,7 @@ describe("createOnMessageHandler", () => {
   it("logs both the inbound and outbound message", async () => {
     const logger = new FakeConversationLogger();
     const onMessage = createOnMessageHandler({
-      businessConfig: BUSINESS_CONFIG,
-      faqBlueprint: FAQ_BLUEPRINT,
-      calendarProvider: new FakeCalendarProvider(),
+      resolveTenant: singleTenant(),
       aiProvider: new FakeAiProvider(),
       sessionStore: new FakeSessionStore(),
       conversationLogger: logger,
@@ -105,9 +104,7 @@ describe("createOnMessageHandler", () => {
   it("logs a booking record when a booking is created", async () => {
     const logger = new FakeConversationLogger();
     const onMessage = createOnMessageHandler({
-      businessConfig: BUSINESS_CONFIG,
-      faqBlueprint: FAQ_BLUEPRINT,
-      calendarProvider: new FakeCalendarProvider(),
+      resolveTenant: singleTenant(),
       aiProvider: new FakeAiProvider(),
       sessionStore: new FakeSessionStore(),
       conversationLogger: logger,
@@ -122,9 +119,7 @@ describe("createOnMessageHandler", () => {
   it("redacts PII (e.g. a phone number) out of message text before logging it", async () => {
     const logger = new FakeConversationLogger();
     const onMessage = createOnMessageHandler({
-      businessConfig: BUSINESS_CONFIG,
-      faqBlueprint: FAQ_BLUEPRINT,
-      calendarProvider: new FakeCalendarProvider(),
+      resolveTenant: singleTenant(),
       aiProvider: new FakeAiProvider(),
       sessionStore: new FakeSessionStore(),
       conversationLogger: logger,
@@ -139,9 +134,7 @@ describe("createOnMessageHandler", () => {
   it("derives distinct sessions for different channels even with the same senderId string", async () => {
     const sessionStore = new FakeSessionStore();
     const onMessage = createOnMessageHandler({
-      businessConfig: BUSINESS_CONFIG,
-      faqBlueprint: FAQ_BLUEPRINT,
-      calendarProvider: new FakeCalendarProvider(),
+      resolveTenant: singleTenant(),
       aiProvider: new FakeAiProvider(),
       sessionStore,
       conversationLogger: new FakeConversationLogger(),
@@ -153,5 +146,38 @@ describe("createOnMessageHandler", () => {
 
     const sessionIds = sessionStore.setCalls.map((c) => c.state.sessionId);
     expect(new Set(sessionIds).size).toBe(2);
+  });
+
+  it("derives distinct sessions for different businessChannelIds even with the same sender and channel", async () => {
+    const sessionStore = new FakeSessionStore();
+    const onMessage = createOnMessageHandler({
+      resolveTenant: singleTenant(),
+      aiProvider: new FakeAiProvider(),
+      sessionStore,
+      conversationLogger: new FakeConversationLogger(),
+      appLogger: createSilentTestLogger(),
+    });
+
+    await onMessage(makeMessage({ businessChannelId: "biz-a", senderId: "999", text: "book something" }));
+    await onMessage(makeMessage({ businessChannelId: "biz-b", senderId: "999", text: "book something" }));
+
+    const sessionIds = sessionStore.setCalls.map((c) => c.state.sessionId);
+    expect(new Set(sessionIds).size).toBe(2);
+  });
+
+  it("replies with a safe fallback and does not throw when no tenant resolves for the businessChannelId", async () => {
+    const sessionStore = new FakeSessionStore();
+    const onMessage = createOnMessageHandler({
+      resolveTenant: () => undefined,
+      aiProvider: new FakeAiProvider(),
+      sessionStore,
+      conversationLogger: new FakeConversationLogger(),
+      appLogger: createSilentTestLogger(),
+    });
+
+    const response = await onMessage(makeMessage({ businessChannelId: "unknown-number", text: "hi" }));
+
+    expect(response.text).toMatch(/isn't set up/i);
+    expect(sessionStore.setCalls).toHaveLength(0);
   });
 });

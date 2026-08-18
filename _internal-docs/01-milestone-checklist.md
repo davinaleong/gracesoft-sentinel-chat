@@ -257,7 +257,7 @@ Carry forward the reliability work already validated in the original plan, now a
 
 # Milestone 11 — Future / Optional
 
-* [ ] Multi-tenant `BusinessConfig` support (multiple businesses on one Concierge deployment)
+* [x] Multi-tenant `BusinessConfig` support (multiple businesses on one Concierge deployment) — new `NormalizedMessage.businessChannelId` (WhatsApp `phone_number_id` / Twilio `To`, populated by those two adapters; unset for Telegram, whose bot identity lives in its webhook URL, not the payload) lets `concierge-service` resolve which business an inbound message belongs to; `BUSINESS_CONFIGS_DIR` (a directory of `<businessChannelId>.json` files) is a new alternative to the single-tenant `BUSINESS_CONFIG_PATH`, and session ids are now tenant-scoped so the same customer messaging two businesses can't collide onto one conversation state
 * [ ] Mother's Day Edition: `provider-drive-google` + embeddings/RAG for personal recipe retrieval
 * [x] Additional AI provider (Anthropic/Gemini) as second `AIProvider` implementation — went with Gemini over Anthropic: Anthropic has no native embeddings API, and `embed` is part of the `AIProvider` contract every implementation must satisfy
 * [x] Additional channel (e.g. Instagram DMs, SMS) as third `ChannelAdapter` implementation — went with SMS via Twilio: simpler/better-documented webhook model than Instagram's Graph API, and it proves the abstraction against a channel with genuinely *less* capability (plain text only, no interactive UI)

@@ -18,8 +18,16 @@ export const ConciergeServiceEnvSchema = z
     REDIS_URL: z.string().min(1),
     DATABASE_URL: z.string().min(1),
 
-    /** Path to a JSON file matching core's BusinessConfigSchema. */
-    BUSINESS_CONFIG_PATH: z.string().min(1),
+    /** Single-tenant mode: path to a JSON file matching core's BusinessConfigSchema. */
+    BUSINESS_CONFIG_PATH: z.string().min(1).optional(),
+    /**
+     * Multi-tenant mode: a directory of BusinessConfig JSON files, one per
+     * business, each named `<businessChannelId>.json` (the WhatsApp
+     * `phone_number_id` or Twilio `To` number that routes to that business —
+     * see `NormalizedMessage.businessChannelId`). Takes precedence over
+     * BUSINESS_CONFIG_PATH when both are set.
+     */
+    BUSINESS_CONFIGS_DIR: z.string().min(1).optional(),
 
     WHATSAPP_ENABLED: z.coerce.boolean().default(false),
     WHATSAPP_PHONE_NUMBER_ID: z.string().optional(),
@@ -44,6 +52,13 @@ export const ConciergeServiceEnvSchema = z
     }
     if (!env.WHATSAPP_ENABLED && !env.TELEGRAM_ENABLED) {
       ctx.addIssue({ code: "custom", path: ["WHATSAPP_ENABLED"], message: "At least one of WHATSAPP_ENABLED or TELEGRAM_ENABLED must be true" });
+    }
+    if (!env.BUSINESS_CONFIG_PATH && !env.BUSINESS_CONFIGS_DIR) {
+      ctx.addIssue({
+        code: "custom",
+        path: ["BUSINESS_CONFIG_PATH"],
+        message: "At least one of BUSINESS_CONFIG_PATH or BUSINESS_CONFIGS_DIR must be set",
+      });
     }
   });
 

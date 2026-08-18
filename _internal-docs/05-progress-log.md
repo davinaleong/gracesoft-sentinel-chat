@@ -4,6 +4,28 @@ Companion to `01-milestone-checklist.md`. One entry per work session, newest fir
 
 ---
 
+## 2026-08-18 — Milestone 11 (5/6): Multi-tenant `BusinessConfig` support
+
+**Status:** Five of six optional/future items done.
+
+**The core question:** how does one `concierge-service` deployment know which business an inbound message belongs to? The channel-layer already carries the answer, just unused until now — WhatsApp Cloud API's webhook payload includes `metadata.phone_number_id` (which of the business's registered numbers received the message), and Twilio's inbound webhook includes `To` (which of the business's Twilio numbers). Both can route multiple numbers to the same webhook URL under one app/account, which is exactly the multi-tenant case. Telegram doesn't have an equivalent: a bot's identity is implicit in its webhook URL/token, not present in the update payload itself, so true Telegram multi-tenancy would mean mounting multiple bot configs at different routes — out of scope here, left as a documented gap.
+
+**Core change:** added `NormalizedMessage.businessChannelId?: string` (`packages/core/src/message.ts`) — deliberately *not* named `recipientId`, since `ChannelAdapter.formatOutbound`'s existing `context.recipientId` already means the opposite direction (the customer's id to reply *to*). `businessChannelId` is which of the *business's own* identities received the message. `WhatsAppChannelAdapter.parseInbound` populates it from `metadata.phone_number_id`; `SmsChannelAdapter.parseInbound` from `To`; `TelegramChannelAdapter` leaves it `undefined` (documented, not a bug).
+
+**Service-layer resolution (`apps/concierge-service`):**
+- `business-config-loader.ts` gained `loadBusinessConfigRegistry(dir)` — reads every `<businessChannelId>.json` file directly inside a directory (non-recursive `readdirSync`), keyed by filename stem. Each business's FAQ blueprint must live in a nested subdirectory (e.g. `./faq-blueprints/<id>.json`) so it isn't itself misread as a business config file.
+- `env.ts`: `BUSINESS_CONFIG_PATH` is now optional; new optional `BUSINESS_CONFIGS_DIR` (a directory, for multi-tenant); `superRefine` requires at least one of the two.
+- `on-message.ts`: `OnMessageDeps` now takes `resolveTenant: (message) => TenantContext | undefined` instead of flat `businessConfig`/`faqBlueprint`/`calendarProvider` fields — single-tenant mode is just a resolver that always returns the same `TenantContext` regardless of input, so there's no special-casing between the two modes inside the handler itself. An unresolved tenant (unrecognized `businessChannelId`) gets a safe fallback reply, not a crash or silent misrouting. Session ids are now tenant-scoped (`concierge:${tenant}:${channel}:${senderId}`) — without this, the same customer messaging two different businesses on a multi-tenant deployment would collide onto one shared conversation state, since `senderId` (their own phone number) is the same across both.
+- `composition.ts`: `buildTenantResolver()` builds either a registry of `GoogleCalendarProvider`s (multi-tenant, one per business, all sharing one `GoogleCalendarClient` since the calendar API itself is business-agnostic — only `calendarId` and `businessHours`, both already per-`BusinessConfig`, differ) or a single one (single-tenant, unchanged behavior).
+
+**Verified locally (all green):** `pnpm lint`, `pnpm typecheck`, `pnpm boundaries` (0 violations, 440 modules/935 dependencies), `pnpm build`, `pnpm test` — 372/372 workspace-wide (369 package tests + 3 root integration tests), including new coverage for: `businessChannelId` extraction in both `WhatsAppChannelAdapter` and `SmsChannelAdapter`, `loadBusinessConfigRegistry` (multi-file load, subdirectory FAQ resolution, ignoring non-conforming top-level entries), tenant-scoped session isolation, and the unresolved-tenant fallback path.
+
+**Nothing deferred to the user for this item** — no live credentials needed; this is pure wiring/config-shape work.
+
+**Next:** the Mother's Day Edition (`provider-drive-google` + embeddings/RAG for personal recipe retrieval) — the last Milestone 11 item, and the last item on either checklist.
+
+---
+
 ## 2026-08-13 — Milestone 11 (4/6): Meal planning / grocery list generation (Cook)
 
 **Status:** Four of six optional/future items done.

@@ -5,11 +5,23 @@ import type { ConversationLogger } from "@gracesoft-sentinel/logging-postgres";
 import { withBookingLogging } from "./logging-calendar-provider.js";
 
 const DEFAULT_SESSION_TTL_SECONDS = 60 * 60 * 24; // 24h — long enough to span a slow-to-reply booking flow, short enough not to accumulate forever
+const NO_TENANT_MESSAGE = "Sorry, this number isn't set up with us yet. Please contact the business directly.";
 
-export interface OnMessageDeps {
+export interface TenantContext {
   businessConfig: BusinessConfig;
   faqBlueprint: FaqGroundingBlueprint;
   calendarProvider: CalendarProvider;
+}
+
+export interface OnMessageDeps {
+  /**
+   * Resolves which business a given inbound message belongs to, keyed off
+   * `message.businessChannelId` (which of the business's own WhatsApp/Twilio
+   * identities received it). Single-tenant deployments just return the same
+   * `TenantContext` regardless of input; multi-tenant ones look it up in a
+   * registry and may return `undefined` for an unrecognized identity.
+   */
+  resolveTenant: (message: NormalizedMessage) => TenantContext | undefined;
   aiProvider: AIProvider;
   sessionStore: SessionStore;
   conversationLogger: ConversationLogger;
@@ -18,7 +30,11 @@ export interface OnMessageDeps {
 }
 
 function sessionIdFor(message: NormalizedMessage): string {
-  return `concierge:${message.channel}:${message.senderId}`;
+  // Scoped by tenant too — otherwise the same customer messaging two
+  // different businesses on a multi-tenant deployment would collide onto
+  // one shared conversation state.
+  const tenant = message.businessChannelId ?? "default";
+  return `concierge:${tenant}:${message.channel}:${message.senderId}`;
 }
 
 function freshState(sessionId: string, message: NormalizedMessage): ConversationState {
@@ -48,6 +64,13 @@ export function createOnMessageHandler(deps: OnMessageDeps): (message: Normalize
   return async (message: NormalizedMessage): Promise<NormalizedResponse> => {
     const sessionId = sessionIdFor(message);
     const log = deps.appLogger.child({ sessionId });
+
+    const tenant = deps.resolveTenant(message);
+    if (!tenant) {
+      log.warn({ businessChannelId: message.businessChannelId }, "no tenant resolved for inbound message");
+      return { text: NO_TENANT_MESSAGE };
+    }
+
     const state = (await deps.sessionStore.get(sessionId)) ?? freshState(sessionId, message);
 
     await logSafely(deps.conversationLogger, log, {
@@ -62,10 +85,10 @@ export function createOnMessageHandler(deps: OnMessageDeps): (message: Normalize
     const result = await handleMessage({
       message,
       state,
-      businessConfig: deps.businessConfig,
-      calendarProvider: withBookingLogging(deps.calendarProvider, deps.conversationLogger, sessionId, log),
+      businessConfig: tenant.businessConfig,
+      calendarProvider: withBookingLogging(tenant.calendarProvider, deps.conversationLogger, sessionId, log),
       aiProvider: deps.aiProvider,
-      faqBlueprint: deps.faqBlueprint,
+      faqBlueprint: tenant.faqBlueprint,
     });
 
     await deps.sessionStore.set(result.state, deps.sessionTtlSeconds ?? DEFAULT_SESSION_TTL_SECONDS);

@@ -21,6 +21,7 @@ describe("SmsChannelAdapter.parseInbound — text", () => {
     expect(message.senderId).toBe("+6591234567");
     expect(message.text).toBe("Hi there");
     expect(message.channel).toBe("sms");
+    expect(message.businessChannelId).toBe("+18885550000");
   });
 
   it("throws a clear error when the payload is missing MessageSid/From", async () => {

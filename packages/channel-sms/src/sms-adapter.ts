@@ -55,6 +55,10 @@ export class SmsChannelAdapter implements ChannelAdapter {
       timestamp: new Date().toISOString(),
       text: body.Body,
       media,
+      // `To` is the business's own Twilio number the message was sent to —
+      // Twilio can route multiple numbers to the same webhook URL, so this
+      // is how a single deployment tells tenants apart.
+      businessChannelId: body.To,
       raw: payload,
     };
   }

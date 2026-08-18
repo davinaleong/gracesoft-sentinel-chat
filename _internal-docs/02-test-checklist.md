@@ -94,6 +94,7 @@ Real wiring, mocked external services where appropriate (mock WhatsApp/Telegram 
 
 ### Service composition
 * [x] `concierge-service` boots with WhatsApp + Telegram + OpenAI + Google Calendar all wired — `composition.test.ts` proves the wiring constructs cleanly (no live network calls needed for construction) using the real `business-config.example.json`
+* [x] Multi-tenant resolution: two businesses on one deployment stay isolated — `on-message.test.ts` proves distinct `businessChannelId`s get distinct sessions even with the same sender/channel, and that an unrecognized `businessChannelId` gets a safe fallback reply rather than crashing or falling through to the wrong tenant's config; `composition.test.ts` proves `BUSINESS_CONFIGS_DIR` wires up a directory of per-business configs (Milestone 11)
 * [x] `cook-service` boots with WhatsApp + Telegram + OpenAI wired — `composition.test.ts`
 * [x] Health check / readiness endpoints respond correctly
 * [ ] Service starts cleanly with docker-compose (Redis + Postgres + service) — `docker-compose.yml` + Dockerfiles exist and are structurally correct, but running it needs real OpenAI/Google credentials this environment doesn't have; not exercised end-to-end
