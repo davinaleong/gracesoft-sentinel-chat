@@ -4,6 +4,28 @@ Companion to `01-milestone-checklist.md`. One entry per work session, newest fir
 
 ---
 
+## 2026-08-13 — Milestone 11 (2/6): SMS via Twilio as a third `ChannelAdapter`
+
+**Status:** Two of six optional/future items done.
+
+**Decision — Twilio SMS over Instagram DMs:** the checklist offered either as an example. Instagram DMs go through the Meta Graph API with a webhook/auth model close to WhatsApp's own complexity (page tokens, app review, similar signature verification) — a second implementation of a shape already proven. Twilio SMS is simpler to integrate correctly and, more importantly, is the channel with the *least* capability of any covered so far (plain text only — no buttons, no lists, no inline keyboards), which is actually the more interesting proof: does `ChannelAdapter` hold up at the low end, not just for feature-rich channels?
+
+**What was built:**
+- `packages/channel-sms` — `SmsChannelAdapter implements ChannelAdapter`, same structural shape as `channel-whatsapp`/`channel-telegram` (adapter + signature verification + API client + webhook router), but with real, channel-specific differences throughout:
+  - Twilio posts inbound webhooks as `application/x-www-form-urlencoded`, not JSON — `express.urlencoded()` parses that directly, no raw-body handling needed since Twilio's signature (`signature.ts`, HMAC-SHA1) covers the parsed key/value pairs, not raw bytes — a genuinely different algorithm from WhatsApp's HMAC-over-raw-body or Telegram's static shared-secret header.
+  - Twilio's signature also covers the exact webhook URL, which is unreliable to reconstruct behind a proxy — so `SmsWebhookRouterConfig` takes `webhookUrl` explicitly rather than inferring it from the request.
+  - **No interactive UI exists on SMS at all** — `formatOutbound` degrades `quickReplies` to a plain numbered list ("1. Mon, 4 May, 9:00am\n2. ..."). This isn't new code in the agents: a numbered reply like "2" is resolved by the free-text ordinal fallback every agent already has behind `quickReplyId` (e.g. `agent-concierge`'s `resolveSlotSelection`) — SMS is just the first channel that *always* takes that path instead of it being a backup.
+  - MMS media (Twilio's URLs also require Basic Auth) is downloaded and inlined as a `data:` URI, the same pattern as WhatsApp/Telegram media handling, for the same reason (never hand a downstream `AIProvider` a link that needs the account's own credentials to fetch).
+  - Twilio's `From` (the business's own number) is a per-request body field, not baked into the API path like WhatsApp's `phoneNumberId` — so `formatOutbound` returns `{to, body}` only, and `TwilioApiClient` (which owns `fromNumber`) fills it in when actually sending.
+
+**Verified locally (all green):** `pnpm lint`, `pnpm typecheck`, `pnpm boundaries` (0 violations, 434 modules/917 dependencies — the `no-channel-to-channel` rule added alongside Milestone 8's `apps/` boundary extension holds for a third channel pairing, not just the original two), `pnpm build`, `pnpm test` — 24/24 new tests (including a real end-to-end webhook integration test with a genuine Twilio-style HMAC-SHA1 signature, same `http.createServer` + `fetch` pattern as the other two channels' router tests), 336/336 workspace-wide.
+
+**Nothing deferred to the user for this item** — no live Twilio account was needed or used.
+
+**Next:** voice notes, meal planning/grocery lists, multi-tenant `BusinessConfig`, and the Mother's Day Edition (Drive + RAG) — the remaining four Milestone 11 items.
+
+---
+
 ## 2026-08-13 — Milestone 11 (1/6): Gemini as a second real `AIProvider`
 
 **Status:** One of six optional/future items done; continuing through the rest of Milestone 11 next.

@@ -57,7 +57,7 @@ These run against **every implementation** of a `core` interface, so behavior is
 ### Boundary enforcement
 * [ ] Static lint check: `agent-concierge` has zero imports from `channel-*` or `provider-*` packages
 * [ ] Static lint check: `agent-cook` has zero imports from `channel-*` or `provider-*` packages
-* [ ] Static lint check: `channel-whatsapp` and `channel-telegram` have zero imports from each other
+* [x] Static lint check: `channel-whatsapp` and `channel-telegram` have zero imports from each other — `.dependency-cruiser.cjs`'s `no-channel-to-channel` rule (added alongside Milestone 8's `apps/` boundary extension), generalized to cover any `channel-*` pair; `channel-sms` (Milestone 11) also passes it
 * [ ] Static lint check: no package imports another's internals (only `index.ts` public exports)
 * [ ] CI fails the build if any boundary check above fails
 

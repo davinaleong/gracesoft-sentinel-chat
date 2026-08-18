@@ -260,7 +260,7 @@ Carry forward the reliability work already validated in the original plan, now a
 * [ ] Multi-tenant `BusinessConfig` support (multiple businesses on one Concierge deployment)
 * [ ] Mother's Day Edition: `provider-drive-google` + embeddings/RAG for personal recipe retrieval
 * [x] Additional AI provider (Anthropic/Gemini) as second `AIProvider` implementation — went with Gemini over Anthropic: Anthropic has no native embeddings API, and `embed` is part of the `AIProvider` contract every implementation must satisfy
-* [ ] Additional channel (e.g. Instagram DMs, SMS) as third `ChannelAdapter` implementation
+* [x] Additional channel (e.g. Instagram DMs, SMS) as third `ChannelAdapter` implementation — went with SMS via Twilio: simpler/better-documented webhook model than Instagram's Graph API, and it proves the abstraction against a channel with genuinely *less* capability (plain text only, no interactive UI)
 * [ ] Voice note input handling
 * [ ] Meal planning / grocery list generation (Cook)
 

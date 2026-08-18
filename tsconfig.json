@@ -14,6 +14,7 @@
     { "path": "packages/legal-concierge" },
     { "path": "packages/legal-cook" },
     { "path": "packages/logging" },
-    { "path": "packages/provider-ai-gemini" }
+    { "path": "packages/provider-ai-gemini" },
+    { "path": "packages/channel-sms" }
   ]
 }
