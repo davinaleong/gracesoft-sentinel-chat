@@ -1,4 +1,5 @@
 import type { DishClassification } from "./dish-classifier.js";
+import type { PersonalRecipeMatch } from "./personal-recipe.js";
 import type { Recipe } from "./recipe-generator.js";
 
 /**
@@ -50,6 +51,10 @@ export function formatRecipe(recipe: Recipe): string {
   );
 
   return lines.join("\n");
+}
+
+export function formatPersonalRecipe(match: PersonalRecipeMatch): string {
+  return [`Found it! ${match.title}`, "", match.content].join("\n");
 }
 
 export function formatGroceryList(items: string[], dishNames: string[]): string {

@@ -28,4 +28,29 @@ describe("loadEnv", () => {
       /WHATSAPP_PHONE_NUMBER_ID is required/
     );
   });
+
+  it("throws when GOOGLE_DRIVE_RECIPES_FOLDER_ID is set but the Google service account vars are missing", () => {
+    expect(() =>
+      loadEnv({
+        ...BASE_ENV,
+        TELEGRAM_ENABLED: "true",
+        TELEGRAM_BOT_TOKEN: "t",
+        TELEGRAM_WEBHOOK_SECRET: "s",
+        GOOGLE_DRIVE_RECIPES_FOLDER_ID: "folder-1",
+      } as unknown as NodeJS.ProcessEnv)
+    ).toThrow(/GOOGLE_SERVICE_ACCOUNT_EMAIL is required/);
+  });
+
+  it("loads successfully with the Mother's Day Edition fully configured", () => {
+    const env = loadEnv({
+      ...BASE_ENV,
+      TELEGRAM_ENABLED: "true",
+      TELEGRAM_BOT_TOKEN: "t",
+      TELEGRAM_WEBHOOK_SECRET: "s",
+      GOOGLE_DRIVE_RECIPES_FOLDER_ID: "folder-1",
+      GOOGLE_SERVICE_ACCOUNT_EMAIL: "svc@example.iam.gserviceaccount.com",
+      GOOGLE_SERVICE_ACCOUNT_PRIVATE_KEY: "key",
+    } as unknown as NodeJS.ProcessEnv);
+    expect(env.GOOGLE_DRIVE_RECIPES_FOLDER_ID).toBe("folder-1");
+  });
 });

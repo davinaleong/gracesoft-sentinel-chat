@@ -20,6 +20,7 @@
     "@gracesoft-sentinel/logging": "workspace:*",
     "@gracesoft-sentinel/logging-postgres": "workspace:*",
     "@gracesoft-sentinel/provider-ai-openai": "workspace:*",
+    "@gracesoft-sentinel/provider-drive-google": "workspace:*",
     "@gracesoft-sentinel/provider-session-redis": "workspace:*",
     "express": "^4.19.2",
     "express-rate-limit": "^7.4.1",

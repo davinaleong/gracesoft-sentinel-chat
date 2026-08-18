@@ -6,4 +6,6 @@ export { generateRecipe } from "./recipe-generator.js";
 export type { Recipe, RecipeNutrition } from "./recipe-generator.js";
 export { isDietaryAdjustmentRequest } from "./dietary-adjustment.js";
 export { isGroceryListRequest, generateGroceryList } from "./grocery-list.js";
-export { formatRecipe, formatUnidentifiedDish, formatGroceryList } from "./formatter.js";
+export { isPersonalRecipeRequest, findPersonalRecipe } from "./personal-recipe.js";
+export type { PersonalRecipeMatch } from "./personal-recipe.js";
+export { formatRecipe, formatUnidentifiedDish, formatGroceryList, formatPersonalRecipe } from "./formatter.js";

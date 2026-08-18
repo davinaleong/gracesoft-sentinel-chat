@@ -4,6 +4,30 @@ Companion to `01-milestone-checklist.md`. One entry per work session, newest fir
 
 ---
 
+## 2026-08-18 — Milestone 11 (6/6): Mother's Day Edition — personal recipe RAG
+
+**Status:** Six of six optional/future items done — Milestone 11, and both checklists, are now complete: every remaining item on `01-milestone-checklist.md` and `02-test-checklist.md` is either checked or explicitly annotated as blocked on something this environment doesn't have (live hosting, live credentials, a real WhatsApp Business/Telegram account for manual E2E validation).
+
+**New package: `provider-drive-google`**, implementing the `RecipeSourceProvider` interface that's existed in `core` since Milestone 1 as a deliberately-minimal placeholder for exactly this feature:
+- `google-drive-client.ts` — minimal `GoogleDriveClient` interface (`files.list`/`files.get`/`files.export`) + `createGoogleDriveClient()`, same "our own small SDK slice, not the full `googleapis` surface" pattern as `provider-calendar-google`'s `GoogleCalendarClient`. Service-account JWT scoped read-only to Drive.
+- `recipe-embeddings-index.ts` — the actual RAG core: `cosineSimilarity()` (pure function, handles zero-vectors without dividing by zero) and `RecipeEmbeddingsIndex`, an in-memory nearest-neighbor search. Deliberately not a real vector database — a personal recipe folder is dozens of documents, not millions, so a linear scan is the right amount of engineering for the actual problem size.
+- `google-drive-recipe-provider.ts` — `GoogleDriveRecipeProvider implements RecipeSourceProvider`: lists the configured Drive folder, downloads each file (handling the Google Docs case separately via `files.export` — `files.get` doesn't work on those), embeds every document via the injected `AIProvider.embed`, and indexes it. `findRecipes()` embeds the query the same way and does cosine-similarity search. The index is built lazily on first call and cached (`ensureIndex()`), not rebuilt per-request.
+- Fully unit-tested with fakes (`FakeGoogleDriveClient`, and a `FakeEmbeddingAiProvider` whose "embedding" is a small fixed-vocabulary bag-of-words count — deterministic, and similarity ranking still behaves meaningfully in tests without a live embeddings model) — no live Drive/OpenAI credentials needed or used. 13 tests, all passing on the first `vitest run`.
+
+**Wired into `agent-cook`:** `CookHandleMessageInput` gained an optional `recipeSourceProvider` param — a personal-recipe request ("do you have my mom's recipe for laksa?", detected by `isPersonalRecipeRequest()`, same deterministic-keyword-match philosophy as `isDietaryAdjustmentRequest`/`isGroceryListRequest`) triggers `findPersonalRecipe()`, which returns the top RAG match's title and raw content. Unlike the AI-generated `Recipe` type, this content is the user's own free text (whatever they wrote in the Drive doc) — there's no structured ingredients/steps shape to validate, so `formatPersonalRecipe()` just displays it verbatim rather than routing through `formatRecipe()`. A miss returns a clear not-found message; a lookup failure degrades gracefully rather than crashing (same pattern as every other agent-cook failure path). When no `recipeSourceProvider` is configured, this branch simply never triggers — zero behavior change for any existing deployment.
+
+**Wired into `cook-service`, fully opt-in:** three new optional env vars (`GOOGLE_DRIVE_RECIPES_FOLDER_ID`, `GOOGLE_SERVICE_ACCOUNT_EMAIL`, `GOOGLE_SERVICE_ACCOUNT_PRIVATE_KEY`) — `env.ts`'s `superRefine` requires the latter two only when the folder id is set, mirroring the existing `WHATSAPP_ENABLED`-gates-its-own-vars pattern. `composition.ts`'s `buildRecipeSourceProvider()` returns `undefined` when unconfigured, so every deployment without a Drive folder is completely unaffected — construction itself makes no network call either way, matching every other provider in this composition root.
+
+**Verified locally (all green):** `pnpm lint`, `pnpm typecheck`, `pnpm boundaries` (0 violations, 464 modules/993 dependencies), `pnpm build`, `pnpm test` — 395 workspace tests + 3 root integration tests = 398/398, including the new `provider-drive-google` suite, `agent-cook`'s personal-recipe branch (match found / no match / provider absent / lookup failure), and `cook-service`'s opt-in wiring (composition constructs cleanly when configured, `on-message.ts` threads the provider through end-to-end).
+
+**Also swept both checklists for stale unchecked boundary-enforcement items** that were actually already satisfied (agent-concierge/agent-cook zero imports from channel-*/provider-*, no cross-package internal imports, CI enforcement) — `.dependency-cruiser.cjs`'s rules and `.github/workflows/ci.yml`'s `pnpm boundaries` step already cover all four; they'd just never been marked done.
+
+**Nothing deferred to the user for this item** — no live Drive/OpenAI credentials needed or used; this is pure wiring/RAG-logic work, fully verifiable with fakes.
+
+**Next:** nothing — Milestone 11 was the last milestone, and every item across both checklists is now either checked or explicitly annotated as blocked on real hosting/credentials/accounts this environment doesn't have. Remaining work is genuinely the user's: provision live infrastructure and credentials, deploy, and run the manual/live-LLM E2E validation passes documented in `02-test-checklist.md` sections 3–5.
+
+---
+
 ## 2026-08-18 — Milestone 11 (5/6): Multi-tenant `BusinessConfig` support
 
 **Status:** Five of six optional/future items done.

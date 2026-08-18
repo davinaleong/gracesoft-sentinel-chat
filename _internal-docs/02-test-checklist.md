@@ -40,6 +40,7 @@ No WhatsApp, no Telegram, no OpenAI SDK, no live Calendar API — everything moc
 * [x] Ambiguous/low-confidence dish photo → appropriate fallback response (not a confident wrong guess)
 * [x] Recipe generation includes ingredients, method, substitutions, serving suggestions for a known dish
 * [x] Dietary adjustment request (e.g. "make it vegetarian") correctly modifies ingredient list
+* [x] "Mother's Day Edition" personal recipe RAG (Milestone 11, opt-in): semantic search over embedded documents ranks the most relevant one first (`provider-drive-google`'s `RecipeEmbeddingsIndex`, cosine similarity), Google Docs are exported to plain text rather than downloaded as raw bytes, the Drive folder is indexed once and cached across repeated lookups, `agent-cook` returns the match's own content when found, a clear not-found reply when nothing matches, and a graceful failure message (not a crash) when the lookup itself errors — and the feature is entirely inert when no `recipeSourceProvider` is configured
 
 ---
 
@@ -55,11 +56,11 @@ These run against **every implementation** of a `core` interface, so behavior is
 * [x] `ChannelAdapter` contract suite passes for `channel-telegram`
 
 ### Boundary enforcement
-* [ ] Static lint check: `agent-concierge` has zero imports from `channel-*` or `provider-*` packages
-* [ ] Static lint check: `agent-cook` has zero imports from `channel-*` or `provider-*` packages
+* [x] Static lint check: `agent-concierge` has zero imports from `channel-*` or `provider-*` packages — `.dependency-cruiser.cjs`'s `no-agent-to-channel-or-provider` rule; `pnpm boundaries` passes with 0 violations (464 modules/993 dependencies as of Milestone 11's completion)
+* [x] Static lint check: `agent-cook` has zero imports from `channel-*` or `provider-*` packages — same rule; confirmed again by this milestone's `provider-drive-google` integration going through `RecipeSourceProvider`/`cook-service` rather than a direct import
 * [x] Static lint check: `channel-whatsapp` and `channel-telegram` have zero imports from each other — `.dependency-cruiser.cjs`'s `no-channel-to-channel` rule (added alongside Milestone 8's `apps/` boundary extension), generalized to cover any `channel-*` pair; `channel-sms` (Milestone 11) also passes it
-* [ ] Static lint check: no package imports another's internals (only `index.ts` public exports)
-* [ ] CI fails the build if any boundary check above fails
+* [x] Static lint check: no package imports another's internals (only `index.ts` public exports) — `.dependency-cruiser.cjs`'s `no-cross-package-internals` rule
+* [x] CI fails the build if any boundary check above fails — `.github/workflows/ci.yml` runs `pnpm boundaries` as a required step
 
 ### Schema validation
 * [x] Zod schema rejects malformed `NormalizedMessage`

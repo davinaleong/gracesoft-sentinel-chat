@@ -4,6 +4,9 @@ import type {
   ChatCompleteResult,
   EmbedInput,
   EmbedResult,
+  FindRecipesInput,
+  RecipeSourceProvider,
+  RecipeSourceResult,
   TranscribeAudioInput,
   TranscribeAudioResult,
   VisionAnalyzeInput,
@@ -87,4 +90,24 @@ export function fakeAiProviderWithTranscription(transcribedText: string): FakeAi
     () => ({ text: JSON.stringify({ dishName: "Chicken Rice" }) }),
     () => ({ text: transcribedText })
   );
+}
+
+export class FakeRecipeSourceProvider implements RecipeSourceProvider {
+  public findRecipesCalls: FindRecipesInput[] = [];
+
+  constructor(private readonly results: RecipeSourceResult[]) {}
+
+  async findRecipes(input: FindRecipesInput): Promise<RecipeSourceResult[]> {
+    this.findRecipesCalls.push(input);
+    return this.results;
+  }
+}
+
+/** A `FakeRecipeSourceProvider` that always throws, for testing the graceful-degradation path. */
+export function fakeRecipeSourceProviderThatFails(): RecipeSourceProvider {
+  return {
+    findRecipes: async () => {
+      throw new Error("upstream recipe search failed");
+    },
+  };
 }

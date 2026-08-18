@@ -27,4 +27,14 @@ describe("buildComposition — cook-service", () => {
     expect(composition.onMessage).toBeInstanceOf(Function);
     expect(composition.readinessCheck).toBeInstanceOf(Function);
   });
+
+  it("also wires the opt-in Mother's Day Edition (Google Drive recipe retrieval) without throwing when configured", () => {
+    const composition = buildComposition({
+      ...env,
+      GOOGLE_DRIVE_RECIPES_FOLDER_ID: "folder-1",
+      GOOGLE_SERVICE_ACCOUNT_EMAIL: "svc@example.iam.gserviceaccount.com",
+      GOOGLE_SERVICE_ACCOUNT_PRIVATE_KEY: "-----BEGIN PRIVATE KEY-----\\nabc\\n-----END PRIVATE KEY-----\\n",
+    });
+    expect(composition.onMessage).toBeInstanceOf(Function);
+  });
 });

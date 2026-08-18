@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import type { NormalizedMessage } from "@gracesoft-sentinel/core";
 import { createOnMessageHandler } from "./on-message.js";
-import { FakeAiProvider, FakeConversationLogger, FakeSessionStore, createSilentTestLogger } from "./test-support.js";
+import { FakeAiProvider, FakeConversationLogger, FakeRecipeSourceProvider, FakeSessionStore, createSilentTestLogger } from "./test-support.js";
 
 function makeMessage(overrides: Partial<NormalizedMessage> = {}): NormalizedMessage {
   return {
@@ -86,5 +86,23 @@ describe("createOnMessageHandler", () => {
     });
     await onMessage(makeMessage({ text: "hi" }));
     expect(sessionStore.setCalls[0]!.state.sessionId).toBe("cook:whatsapp:6591234567");
+  });
+
+  it("threads an optional recipeSourceProvider through to agent-cook's personal-recipe lookup", async () => {
+    const recipeSourceProvider = new FakeRecipeSourceProvider([
+      { id: "1", title: "Mom's Chicken Curry", raw: { content: "Simmer for 40 minutes." } },
+    ]);
+    const onMessage = createOnMessageHandler({
+      aiProvider: new FakeAiProvider(),
+      sessionStore: new FakeSessionStore(),
+      conversationLogger: new FakeConversationLogger(),
+      appLogger: createSilentTestLogger(),
+      recipeSourceProvider,
+    });
+
+    const response = await onMessage(makeMessage({ text: "do you have my mom's recipe for chicken curry?" }));
+
+    expect(response.text).toContain("Mom's Chicken Curry");
+    expect(recipeSourceProvider.findRecipesCalls).toHaveLength(1);
   });
 });

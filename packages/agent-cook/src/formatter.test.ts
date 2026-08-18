@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { formatGroceryList, formatRecipe, formatUnidentifiedDish } from "./formatter.js";
+import { formatGroceryList, formatPersonalRecipe, formatRecipe, formatUnidentifiedDish } from "./formatter.js";
 import type { Recipe } from "./recipe-generator.js";
 
 const RECIPE: Recipe = {
@@ -57,6 +57,14 @@ describe("formatUnidentifiedDish", () => {
   it("omits the note line when there isn't one", () => {
     const text = formatUnidentifiedDish({ dishName: null });
     expect(text).not.toContain("undefined");
+  });
+});
+
+describe("formatPersonalRecipe", () => {
+  it("includes the recipe title and its verbatim content", () => {
+    const text = formatPersonalRecipe({ title: "Mom's Chicken Curry", content: "Simmer for 40 minutes..." });
+    expect(text).toContain("Mom's Chicken Curry");
+    expect(text).toContain("Simmer for 40 minutes...");
   });
 });
 

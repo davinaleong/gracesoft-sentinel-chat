@@ -2,7 +2,14 @@ import { describe, expect, it } from "vitest";
 import type { ConversationState, NormalizedMessage } from "@gracesoft-sentinel/core";
 import { handleMessage } from "./handle-message.js";
 import type { CookContext } from "./handle-message.js";
-import { fakeAiProviderHappyPath, fakeAiProviderUnidentified, fakeAiProviderWith, fakeAiProviderWithTranscription } from "./test-support.js";
+import {
+  fakeAiProviderHappyPath,
+  fakeAiProviderUnidentified,
+  fakeAiProviderWith,
+  fakeAiProviderWithTranscription,
+  FakeRecipeSourceProvider,
+  fakeRecipeSourceProviderThatFails,
+} from "./test-support.js";
 
 function makeMessage(overrides: Partial<NormalizedMessage> = {}): NormalizedMessage {
   return {
@@ -236,6 +243,55 @@ describe("handleMessage — grocery list / meal plan", () => {
       aiProvider,
     });
     expect(result.response.text).toMatch(/couldn't put that grocery list together/i);
+  });
+});
+
+describe("handleMessage — personal recipe (Mother's Day Edition)", () => {
+  it("finds and returns a matching personal recipe when a recipeSourceProvider is configured", async () => {
+    const recipeSourceProvider = new FakeRecipeSourceProvider([
+      { id: "1", title: "Mom's Chicken Curry", raw: { content: "Simmer the chicken for 40 minutes with coconut milk." } },
+    ]);
+
+    const result = await handleMessage({
+      message: makeMessage({ text: "do you have my mom's recipe for chicken curry?" }),
+      state: makeState(),
+      aiProvider: fakeAiProviderHappyPath(),
+      recipeSourceProvider,
+    });
+
+    expect(result.response.text).toContain("Mom's Chicken Curry");
+    expect(result.response.text).toContain("Simmer the chicken for 40 minutes");
+    expect(recipeSourceProvider.findRecipesCalls).toHaveLength(1);
+  });
+
+  it("falls back to the photo prompt when no recipeSourceProvider is configured, even with matching phrasing", async () => {
+    const result = await handleMessage({
+      message: makeMessage({ text: "do you have my mom's recipe for chicken curry?" }),
+      state: makeState(),
+      aiProvider: fakeAiProviderHappyPath(),
+    });
+    expect(result.response.text).toMatch(/send me a photo/i);
+  });
+
+  it("replies with a not-found message, without a silent failure, when nothing matches", async () => {
+    const recipeSourceProvider = new FakeRecipeSourceProvider([]);
+    const result = await handleMessage({
+      message: makeMessage({ text: "my family recipe for popiah" }),
+      state: makeState(),
+      aiProvider: fakeAiProviderHappyPath(),
+      recipeSourceProvider,
+    });
+    expect(result.response.text).toMatch(/couldn't find a matching recipe/i);
+  });
+
+  it("degrades gracefully, without a silent failure, when the lookup itself fails", async () => {
+    const result = await handleMessage({
+      message: makeMessage({ text: "my mom's recipe for laksa" }),
+      state: makeState(),
+      aiProvider: fakeAiProviderHappyPath(),
+      recipeSourceProvider: fakeRecipeSourceProviderThatFails(),
+    });
+    expect(result.response.text).toMatch(/couldn't search your saved recipes/i);
   });
 });
 

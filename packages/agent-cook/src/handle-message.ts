@@ -1,14 +1,22 @@
-import type { AIProvider, ConversationState, NormalizedMessage, NormalizedResponse } from "@gracesoft-sentinel/core";
+import type { AIProvider, ConversationState, NormalizedMessage, NormalizedResponse, RecipeSourceProvider } from "@gracesoft-sentinel/core";
 import { classifyDish } from "./dish-classifier.js";
 import { isDietaryAdjustmentRequest } from "./dietary-adjustment.js";
-import { formatGroceryList, formatRecipe, formatUnidentifiedDish } from "./formatter.js";
+import { formatGroceryList, formatPersonalRecipe, formatRecipe, formatUnidentifiedDish } from "./formatter.js";
 import { generateGroceryList, isGroceryListRequest } from "./grocery-list.js";
+import { findPersonalRecipe, isPersonalRecipeRequest } from "./personal-recipe.js";
 import { generateRecipe, type Recipe } from "./recipe-generator.js";
 
 export interface CookHandleMessageInput {
   message: NormalizedMessage;
   state: ConversationState;
   aiProvider: AIProvider;
+  /**
+   * Opt-in "Mother's Day Edition" (Milestone 11) capability: retrieves a
+   * personal recipe (e.g. from a Google Drive folder via
+   * `provider-drive-google`) instead of generating one from scratch.
+   * Deployments that don't configure one simply never take this path.
+   */
+  recipeSourceProvider?: RecipeSourceProvider;
 }
 
 export interface CookHandleMessageResult {
@@ -38,6 +46,11 @@ const ANALYSIS_FAILED = "Sorry, I couldn't analyse that photo right now. Please 
 const VOICE_NOTE_FAILED = "Sorry, I couldn't process that voice note. Please try typing instead, or send a dish photo.";
 
 const GROCERY_LIST_FAILED = "Sorry, I couldn't put that grocery list together right now. Please try again in a moment.";
+
+const PERSONAL_RECIPE_NOT_FOUND =
+  "I couldn't find a matching recipe in your saved recipes. Try describing it differently, or send me a dish photo instead.";
+
+const PERSONAL_RECIPE_LOOKUP_FAILED = "Sorry, I couldn't search your saved recipes right now. Please try again in a moment.";
 
 function withContext(state: ConversationState, context: CookContext): ConversationState {
   return { ...state, context, updatedAt: new Date().toISOString() };
@@ -118,6 +131,23 @@ async function handleDietaryAdjustment(
   }
 }
 
+/** "Mother's Day Edition" (Milestone 11) — RAG lookup against a personal recipe source, not AI generation. */
+async function handlePersonalRecipeRequest(
+  text: string,
+  recipeSourceProvider: RecipeSourceProvider,
+  state: ConversationState
+): Promise<CookHandleMessageResult> {
+  try {
+    const match = await findPersonalRecipe(text, recipeSourceProvider);
+    if (!match) {
+      return { response: { text: PERSONAL_RECIPE_NOT_FOUND }, state: withContext(state, {}) };
+    }
+    return { response: { text: formatPersonalRecipe(match) }, state: withContext(state, {}) };
+  } catch {
+    return { response: { text: PERSONAL_RECIPE_LOOKUP_FAILED }, state: withContext(state, {}) };
+  }
+}
+
 async function handleGroceryListRequest(
   recentRecipes: Recipe[],
   aiProvider: AIProvider,
@@ -145,7 +175,7 @@ async function handleGroceryListRequest(
  * prompting for a photo.
  */
 export async function handleMessage(input: CookHandleMessageInput): Promise<CookHandleMessageResult> {
-  const { message, aiProvider, state } = input;
+  const { message, aiProvider, state, recipeSourceProvider } = input;
   const context = (state.context ?? {}) as CookContext;
   const image = message.media?.find((m) => m.type === "image" && m.url);
 
@@ -163,6 +193,10 @@ export async function handleMessage(input: CookHandleMessageInput): Promise<Cook
 
   if (context.lastRecipe && isDietaryAdjustmentRequest(text)) {
     return handleDietaryAdjustment(text, context.lastRecipe, aiProvider, context, state);
+  }
+
+  if (recipeSourceProvider && isPersonalRecipeRequest(text)) {
+    return handlePersonalRecipeRequest(text, recipeSourceProvider, state);
   }
 
   if (context.recentRecipes && context.recentRecipes.length > 0 && isGroceryListRequest(text)) {

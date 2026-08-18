@@ -5,6 +5,9 @@ import type {
   ConversationState,
   EmbedInput,
   EmbedResult,
+  FindRecipesInput,
+  RecipeSourceProvider,
+  RecipeSourceResult,
   SessionStore,
   TranscribeAudioInput,
   TranscribeAudioResult,
@@ -60,6 +63,17 @@ export class FakeSessionStore implements SessionStore {
   }
   async delete(sessionId: string): Promise<void> {
     this.sessions.delete(sessionId);
+  }
+}
+
+export class FakeRecipeSourceProvider implements RecipeSourceProvider {
+  public findRecipesCalls: FindRecipesInput[] = [];
+
+  constructor(private readonly results: RecipeSourceResult[]) {}
+
+  async findRecipes(input: FindRecipesInput): Promise<RecipeSourceResult[]> {
+    this.findRecipesCalls.push(input);
+    return this.results;
   }
 }
 

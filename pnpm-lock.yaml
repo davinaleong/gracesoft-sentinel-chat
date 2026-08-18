@@ -114,6 +114,9 @@ importers:
       '@gracesoft-sentinel/provider-ai-openai':
         specifier: workspace:*
         version: link:../../packages/provider-ai-openai
+      '@gracesoft-sentinel/provider-drive-google':
+        specifier: workspace:*
+        version: link:../../packages/provider-drive-google
       '@gracesoft-sentinel/provider-session-redis':
         specifier: workspace:*
         version: link:../../packages/provider-session-redis
@@ -422,6 +425,13 @@ importers:
         version: 3.2.7
 
   packages/provider-drive-google:
+    dependencies:
+      '@gracesoft-sentinel/core':
+        specifier: workspace:*
+        version: link:../core
+      googleapis:
+        specifier: ^140.0.0
+        version: 140.0.1
     devDependencies:
       '@gracesoft-sentinel/config-tsconfig':
         specifier: workspace:*
