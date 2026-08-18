@@ -49,7 +49,7 @@ These run against **every implementation** of a `core` interface, so behavior is
 
 ### Interface contract suites
 * [x] `AIProvider` contract suite passes for `provider-ai-openai`
-* [x] `AIProvider` contract suite passes for any stub/second implementation added later
+* [x] `AIProvider` contract suite passes for any stub/second implementation added later — the `EchoAiProvider` stub (Milestone 4) and now the real `GeminiProvider` (Milestone 11) both pass it
 * [x] `CalendarProvider` contract suite passes for `provider-calendar-google`
 * [x] `ChannelAdapter` contract suite passes for `channel-whatsapp`
 * [x] `ChannelAdapter` contract suite passes for `channel-telegram`

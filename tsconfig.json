@@ -13,6 +13,7 @@
     { "path": "packages/logging-postgres" },
     { "path": "packages/legal-concierge" },
     { "path": "packages/legal-cook" },
-    { "path": "packages/logging" }
+    { "path": "packages/logging" },
+    { "path": "packages/provider-ai-gemini" }
   ]
 }

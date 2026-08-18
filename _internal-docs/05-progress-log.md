@@ -4,6 +4,26 @@ Companion to `01-milestone-checklist.md`. One entry per work session, newest fir
 
 ---
 
+## 2026-08-13 — Milestone 11 (1/6): Gemini as a second real `AIProvider`
+
+**Status:** One of six optional/future items done; continuing through the rest of Milestone 11 next.
+
+**Decision — Gemini over Anthropic:** the checklist offered either. Anthropic has no native embeddings API (Voyage AI is their recommended third-party partner for that), and `AIProvider.embed` is part of the contract every implementation must satisfy — `runAIProviderContractTests` actually calls it and checks the returned vectors. Rather than contrive a workaround (pairing Anthropic chat/vision with an unrelated embeddings vendor, or throwing from `embed()` and failing the shared suite), went with Gemini, which has `generateContent` (chat + vision, multimodal in one API) and `embedContent` natively — a clean fit for all three methods.
+
+**What was built:**
+- `packages/provider-ai-gemini` — `GeminiProvider implements AIProvider`, following the same shape as `provider-ai-openai`/`provider-calendar-google`: a minimal `GeminiClient` interface (`generateContent`, `embedContent`) wrapping the real `@google/generative-ai` SDK, so the contract suite runs against an in-memory fake with no live API key or network call.
+- Two real adaptation points, since Gemini's request shape genuinely differs from OpenAI's: (1) Gemini has no `"system"` role in its content array — system messages are extracted and passed via a separate `systemInstruction` field; (2) Gemini uses `"model"` rather than `"assistant"` for the AI's own turns.
+- `visionAnalyze` accepts `{base64}` images directly as inline data, and downloads-then-base64-encodes a `{url}` image before sending it (Gemini's inline-data API doesn't accept arbitrary external URLs) — same pattern already used for WhatsApp/Telegram media, now a fourth place doing the same thing for the same underlying reason (a downstream consumer needs bytes, not a link).
+- `createGeminiProviderFromEnv(env)` mirrors `createOpenAIProviderFromEnv`.
+
+**Verified locally (all green):** `pnpm lint`, `pnpm typecheck`, `pnpm boundaries` (0 violations, 404 modules/844 dependencies), `pnpm build`, `pnpm test` — 9/9 new tests (the full shared `AIProvider` contract suite plus request-shaping tests for role-mapping, system-instruction extraction, and both image-input forms), 312/312 workspace-wide. The API surface assumptions for `@google/generative-ai` (a package version I hadn't verified against live docs) held up — `tsc` would have caught a mismatch immediately, and didn't.
+
+**Nothing deferred to the user for this item** — no live Gemini API key was needed or used.
+
+**Next:** the rest of Milestone 11 — additional channel, voice notes, meal planning/grocery lists, multi-tenant `BusinessConfig`, and the Mother's Day Edition (Drive + RAG).
+
+---
+
 ## 2026-08-13 — Milestone 10: Hardening & Production Readiness
 
 **Status:** Complete except deploying to a live staging environment and smoke-testing it (needs real hosting + credentials this environment doesn't have — health checks and Dockerfiles for that were already done in Milestones 8/9).

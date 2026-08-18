@@ -259,7 +259,7 @@ Carry forward the reliability work already validated in the original plan, now a
 
 * [ ] Multi-tenant `BusinessConfig` support (multiple businesses on one Concierge deployment)
 * [ ] Mother's Day Edition: `provider-drive-google` + embeddings/RAG for personal recipe retrieval
-* [ ] Additional AI provider (Anthropic/Gemini) as second `AIProvider` implementation
+* [x] Additional AI provider (Anthropic/Gemini) as second `AIProvider` implementation — went with Gemini over Anthropic: Anthropic has no native embeddings API, and `embed` is part of the `AIProvider` contract every implementation must satisfy
 * [ ] Additional channel (e.g. Instagram DMs, SMS) as third `ChannelAdapter` implementation
 * [ ] Voice note input handling
 * [ ] Meal planning / grocery list generation (Cook)
