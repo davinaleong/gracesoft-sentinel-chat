@@ -1,0 +1,103 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Multi-tenant Setup — GraceSoft Sentinel Chat API Docs</title>
+<link rel="icon" href="assets/logo-square.png">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Montserrat:wght@400;500;600;700&family=Playfair+Display:wght@600;700&family=Source+Code+Pro:wght@400;500&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="assets/style.css">
+</head>
+<body>
+
+<header class="topbar">
+  <a class="topbar-brand" href="index.html">
+    <img id="brand-logo" src="assets/wm.svg" alt="GraceSoft Sentinel" height="22">
+  </a>
+  <div class="topbar-actions">
+    <a href="../README.md">Repository README</a>
+    <button id="theme-toggle" class="theme-toggle" type="button">Dark mode</button>
+  </div>
+</header>
+
+<div class="shell">
+  <nav class="sidebar">
+    <div class="sidebar-group">
+      <h5>Start here</h5>
+      <ul>
+        <li><a href="index.html">Overview</a></li>
+        <li><a href="getting-started.html">Getting started</a></li>
+      </ul>
+    </div>
+    <div class="sidebar-group">
+      <h5>Reference</h5>
+      <ul>
+        <li><a href="webhooks.html">Webhooks &amp; endpoints</a></li>
+        <li><a href="contracts.html">Data contracts</a></li>
+        <li><a href="multi-tenant.html">Multi-tenant setup</a></li>
+      </ul>
+    </div>
+  </nav>
+
+  <main>
+    <div class="page-header">
+      <h1>Multi-tenant setup</h1>
+      <p class="lede">Run Sentinel Concierge for more than one business on a single <code>concierge-service</code> deployment.</p>
+    </div>
+
+    <h2>How a message is matched to a business</h2>
+    <p>Both WhatsApp and Twilio can route more than one of a business's own numbers to the same webhook URL — WhatsApp's payload carries the receiving number as <code>metadata.phone_number_id</code>, Twilio's as the <code>To</code> field. <code>channel-whatsapp</code> and <code>channel-sms</code> surface that value as <code>NormalizedMessage.businessChannelId</code>, and <code>concierge-service</code> resolves which <code>BusinessConfig</code> applies per-message by looking it up.</p>
+    <div class="callout">Telegram has no equivalent: a bot's identity is implicit in its webhook URL/token, not present in the update payload. Serving multiple Telegram bots from one deployment isn't covered by this mechanism — it would need separate bot configs mounted at separate routes.</div>
+
+    <h2>Single-tenant mode (default)</h2>
+    <p>Set <code>BUSINESS_CONFIG_PATH</code> to one JSON file. Every inbound message resolves to that same business, regardless of <code>businessChannelId</code> — this is unchanged from before multi-tenancy existed.</p>
+    <pre><code>BUSINESS_CONFIG_PATH=./_internal-docs/data/business-config.example.json</code></pre>
+
+    <h2>Multi-tenant mode</h2>
+    <p>Set <code>BUSINESS_CONFIGS_DIR</code> instead — a directory containing one JSON file per business, each named <code>&lt;businessChannelId&gt;.json</code>. It takes precedence over <code>BUSINESS_CONFIG_PATH</code> if both are set.</p>
+    <pre><code>BUSINESS_CONFIGS_DIR=./business-configs</code></pre>
+    <p>Example layout:</p>
+    <pre><code>business-configs/
+├── 1234567890.json          # keyed by a WhatsApp phone_number_id
+├── +18885550000.json        # keyed by a Twilio "To" number
+└── faq-blueprints/
+    ├── business-a.json
+    └── business-b.json</code></pre>
+    <div class="callout warn">The directory listing is <strong>not recursive</strong> — every top-level <code>*.json</code> file is read as a <code>BusinessConfig</code>. Each business's FAQ blueprint must therefore live in a nested subdirectory (e.g. <code>./faq-blueprints/business-a.json</code>, referenced by that business's own <code>faqBlueprintPath</code>) rather than directly inside <code>BUSINESS_CONFIGS_DIR</code> — otherwise it would itself be misread as a malformed business config and fail validation at startup.</div>
+
+    <h3>Example: <code>1234567890.json</code></h3>
+    <pre><code>{
+  "businessId": "business-a",
+  "timezone": "Asia/Singapore",
+  "faqBlueprintPath": "./faq-blueprints/business-a.json",
+  "calendarId": "business-a-calendar-id",
+  "businessHours": { "...": "..." }
+}</code></pre>
+
+    <h2>What's shared vs. per-business</h2>
+    <table>
+      <thead><tr><th>Resource</th><th>Scope</th><th>Why</th></tr></thead>
+      <tbody>
+        <tr><td>AI provider (OpenAI/Gemini)</td><td>Shared across all tenants</td><td>Stateless per-request API calls — no reason to duplicate</td></tr>
+        <tr><td>Google Calendar client</td><td>Shared connection, per-business <code>calendarId</code></td><td>One service-account credential can hold access to every business's calendar; only the calendar id and business hours differ per tenant</td></tr>
+        <tr><td>Business hours, FAQ knowledge base</td><td>Per-business</td><td>Each business's own content</td></tr>
+        <tr><td>Session state</td><td>Per-business</td><td>Session ids are scoped by tenant — the same customer messaging two different businesses never shares conversation state</td></tr>
+      </tbody>
+    </table>
+
+    <h2>Unrecognized businessChannelId</h2>
+    <p>If an inbound message's <code>businessChannelId</code> doesn't match any configured business, the service replies with a safe fallback message rather than crashing or silently routing to the wrong tenant's configuration:</p>
+    <pre><code>"Sorry, this number isn't set up with us yet. Please contact the business directly."</code></pre>
+
+    <div class="footer-nav">
+      <span><span class="label">Previous</span><a href="contracts.html">← Data contracts</a></span>
+      <span class="next"><span class="label">Next</span><a href="index.html">Overview →</a></span>
+    </div>
+  </main>
+</div>
+
+<script src="assets/docs.js"></script>
+</body>
+</html>

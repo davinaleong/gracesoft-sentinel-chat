@@ -1,0 +1,121 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>GraceSoft Sentinel Chat API Docs</title>
+<link rel="icon" href="assets/logo-square.png">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Montserrat:wght@400;500;600;700&family=Playfair+Display:wght@600;700&family=Source+Code+Pro:wght@400;500&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="assets/style.css">
+</head>
+<body>
+
+<header class="topbar">
+  <a class="topbar-brand" href="index.html">
+    <img id="brand-logo" src="assets/wm.svg" alt="GraceSoft Sentinel" height="22">
+  </a>
+  <div class="topbar-actions">
+    <a href="../README.md">Repository README</a>
+    <button id="theme-toggle" class="theme-toggle" type="button">Dark mode</button>
+  </div>
+</header>
+
+<div class="shell">
+  <nav class="sidebar">
+    <div class="sidebar-group">
+      <h5>Start here</h5>
+      <ul>
+        <li><a href="index.html">Overview</a></li>
+        <li><a href="getting-started.html">Getting started</a></li>
+      </ul>
+    </div>
+    <div class="sidebar-group">
+      <h5>Reference</h5>
+      <ul>
+        <li><a href="webhooks.html">Webhooks &amp; endpoints</a></li>
+        <li><a href="contracts.html">Data contracts</a></li>
+        <li><a href="multi-tenant.html">Multi-tenant setup</a></li>
+      </ul>
+    </div>
+  </nav>
+
+  <main>
+    <div class="page-header">
+      <h1>GraceSoft Sentinel Chat</h1>
+      <p class="lede">Two AI chat agents — <strong>Sentinel Concierge</strong> (FAQ answering + booking) and <strong>Sentinel Cook</strong> (dish-photo recipe generation) — exposed as webhook-driven HTTP services over WhatsApp, Telegram, and SMS.</p>
+      <div class="badge-row">
+        <span class="badge">11 / 11 milestones complete</span>
+        <span class="badge">3 channel adapters</span>
+        <span class="badge">2 AI providers</span>
+        <span class="badge">Multi-tenant ready</span>
+      </div>
+    </div>
+
+    <h2>What this API is</h2>
+    <p>Each agent doesn't speak "WhatsApp" or "OpenAI" directly. Inbound messages from any supported channel are normalized into one shared shape before an agent ever sees them, and the agent's reply is translated back into that channel's own format on the way out. That's the whole design: <strong>your integration surface is the webhook you point a channel at</strong> — everything else (which AI provider answers questions, which calendar holds bookings, which businesses share a deployment) is configuration, not code.</p>
+
+    <div class="card-grid">
+      <a class="card" href="getting-started.html">
+        <h4>Getting started →</h4>
+        <p>Install, configure environment variables, and run both services locally with Docker Compose.</p>
+      </a>
+      <a class="card" href="webhooks.html">
+        <h4>Webhooks &amp; endpoints →</h4>
+        <p>Every HTTP route exposed by <code>concierge-service</code> and <code>cook-service</code>, with auth requirements per channel.</p>
+      </a>
+      <a class="card" href="contracts.html">
+        <h4>Data contracts →</h4>
+        <p>The normalized message/response shapes and provider interfaces every channel and integration is held to.</p>
+      </a>
+      <a class="card" href="multi-tenant.html">
+        <h4>Multi-tenant setup →</h4>
+        <p>Run Sentinel Concierge for more than one business on a single deployment.</p>
+      </a>
+    </div>
+
+    <h2>The two agents</h2>
+    <table>
+      <thead>
+        <tr><th>Agent</th><th>Service</th><th>Default port</th><th>Does</th></tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td><strong>Sentinel Concierge</strong></td>
+          <td><code>concierge-service</code></td>
+          <td><code>3000</code></td>
+          <td>Answers FAQs grounded in a business's own knowledge base, resolves booking requests against Google Calendar availability, and escalates anything it isn't confident about.</td>
+        </tr>
+        <tr>
+          <td><strong>Sentinel Cook</strong></td>
+          <td><code>cook-service</code></td>
+          <td><code>3001</code></td>
+          <td>Identifies a dish from a photo and returns a full recipe (ingredients, steps, substitutions, nutrition), handles dietary-adjustment follow-ups, builds a consolidated grocery list across a session's recipes, and can optionally retrieve a user's own saved recipes from Google Drive via semantic search.</td>
+        </tr>
+      </tbody>
+    </table>
+
+    <h2>Supported channels</h2>
+    <table>
+      <thead>
+        <tr><th>Channel</th><th>Package</th><th>Transport</th><th>Notable limits</th></tr>
+      </thead>
+      <tbody>
+        <tr><td>WhatsApp</td><td><code>channel-whatsapp</code></td><td>WhatsApp Cloud API</td><td>Full support: text, media, interactive buttons/lists, voice notes</td></tr>
+        <tr><td>Telegram</td><td><code>channel-telegram</code></td><td>Telegram Bot API</td><td>Full support: text, media, inline keyboards, voice notes</td></tr>
+        <tr><td>SMS / MMS</td><td><code>channel-sms</code></td><td>Twilio</td><td>Plain text only — quick replies degrade to a numbered list the chatter replies to by typing a number</td></tr>
+      </tbody>
+    </table>
+    <p>All three implement the same <code>ChannelAdapter</code> interface and pass the same shared contract test suite, so behavior — quick-reply degradation aside — is guaranteed consistent regardless of which one a message arrived on.</p>
+
+    <div class="footer-nav">
+      <span></span>
+      <span class="next"><span class="label">Next</span><a href="getting-started.html">Getting started →</a></span>
+    </div>
+  </main>
+</div>
+
+<script src="assets/docs.js"></script>
+</body>
+</html>

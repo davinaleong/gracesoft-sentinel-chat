@@ -1,0 +1,129 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Getting Started — GraceSoft Sentinel Chat API Docs</title>
+<link rel="icon" href="assets/logo-square.png">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Montserrat:wght@400;500;600;700&family=Playfair+Display:wght@600;700&family=Source+Code+Pro:wght@400;500&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="assets/style.css">
+</head>
+<body>
+
+<header class="topbar">
+  <a class="topbar-brand" href="index.html">
+    <img id="brand-logo" src="assets/wm.svg" alt="GraceSoft Sentinel" height="22">
+  </a>
+  <div class="topbar-actions">
+    <a href="../README.md">Repository README</a>
+    <button id="theme-toggle" class="theme-toggle" type="button">Dark mode</button>
+  </div>
+</header>
+
+<div class="shell">
+  <nav class="sidebar">
+    <div class="sidebar-group">
+      <h5>Start here</h5>
+      <ul>
+        <li><a href="index.html">Overview</a></li>
+        <li><a href="getting-started.html">Getting started</a></li>
+      </ul>
+    </div>
+    <div class="sidebar-group">
+      <h5>Reference</h5>
+      <ul>
+        <li><a href="webhooks.html">Webhooks &amp; endpoints</a></li>
+        <li><a href="contracts.html">Data contracts</a></li>
+        <li><a href="multi-tenant.html">Multi-tenant setup</a></li>
+      </ul>
+    </div>
+  </nav>
+
+  <main>
+    <div class="page-header">
+      <h1>Getting started</h1>
+      <p class="lede">Bring up <code>concierge-service</code> and/or <code>cook-service</code> locally, backed by real credentials for whichever channel and AI provider you're integrating.</p>
+    </div>
+
+    <h2>Requirements</h2>
+    <ul>
+      <li>Node.js ≥ 20</li>
+      <li>pnpm (this is a pnpm workspace monorepo)</li>
+      <li>Docker, if you want Redis/Postgres/services running together via Compose</li>
+      <li>Credentials for whichever pieces you're wiring up: OpenAI or Google (Gemini), Google Calendar, and at least one of WhatsApp Cloud API / Telegram Bot API / Twilio</li>
+    </ul>
+
+    <h2>Install</h2>
+    <pre><code>pnpm install</code></pre>
+
+    <h2>Configure environment variables</h2>
+    <p>Each service reads its config from environment variables, validated at startup with Zod — a missing or malformed value fails immediately with a clear message rather than surfacing confusingly later. Copy the example file for each service you're running and fill it in:</p>
+    <pre><code>cp apps/concierge-service/.env.example apps/concierge-service/.env
+cp apps/cook-service/.env.example apps/cook-service/.env</code></pre>
+
+    <h3>concierge-service</h3>
+    <table>
+      <thead><tr><th>Variable</th><th>Required</th><th>Notes</th></tr></thead>
+      <tbody>
+        <tr><td><code>PORT</code></td><td>No — default <code>3000</code></td><td></td></tr>
+        <tr><td><code>OPENAI_API_KEY</code></td><td>Yes</td><td></td></tr>
+        <tr><td><code>OPENAI_MODEL</code>, <code>OPENAI_VISION_MODEL</code></td><td>No</td><td>Sensible defaults if unset</td></tr>
+        <tr><td><code>GOOGLE_SERVICE_ACCOUNT_EMAIL</code>, <code>GOOGLE_SERVICE_ACCOUNT_PRIVATE_KEY</code></td><td>Yes</td><td>Google Calendar access</td></tr>
+        <tr><td><code>REDIS_URL</code></td><td>Yes</td><td>Session state</td></tr>
+        <tr><td><code>DATABASE_URL</code></td><td>Yes</td><td>Postgres — conversation/booking audit log</td></tr>
+        <tr><td><code>BUSINESS_CONFIG_PATH</code></td><td>Yes, unless <code>BUSINESS_CONFIGS_DIR</code> is set</td><td>Single-tenant mode — see <a href="multi-tenant.html">Multi-tenant setup</a></td></tr>
+        <tr><td><code>BUSINESS_CONFIGS_DIR</code></td><td>Yes, unless <code>BUSINESS_CONFIG_PATH</code> is set</td><td>Multi-tenant mode</td></tr>
+        <tr><td><code>WHATSAPP_ENABLED</code> + its four vars</td><td>Conditional</td><td>See <a href="webhooks.html#whatsapp">Webhooks — WhatsApp</a></td></tr>
+        <tr><td><code>TELEGRAM_ENABLED</code> + its two vars</td><td>Conditional</td><td>See <a href="webhooks.html#telegram">Webhooks — Telegram</a></td></tr>
+      </tbody>
+    </table>
+    <div class="callout">At least one of <code>WHATSAPP_ENABLED</code>/<code>TELEGRAM_ENABLED</code> must be <code>true</code>, and at least one of <code>BUSINESS_CONFIG_PATH</code>/<code>BUSINESS_CONFIGS_DIR</code> must be set — startup fails fast otherwise.</div>
+
+    <h3>cook-service</h3>
+    <table>
+      <thead><tr><th>Variable</th><th>Required</th><th>Notes</th></tr></thead>
+      <tbody>
+        <tr><td><code>PORT</code></td><td>No — default <code>3001</code></td><td></td></tr>
+        <tr><td><code>OPENAI_API_KEY</code>, <code>OPENAI_MODEL</code>, <code>OPENAI_VISION_MODEL</code></td><td>Key required, models optional</td><td></td></tr>
+        <tr><td><code>REDIS_URL</code>, <code>DATABASE_URL</code></td><td>Yes</td><td></td></tr>
+        <tr><td><code>WHATSAPP_ENABLED</code> / <code>TELEGRAM_ENABLED</code> + their vars</td><td>Conditional, at least one</td><td>Same rules as concierge-service</td></tr>
+        <tr><td><code>GOOGLE_DRIVE_RECIPES_FOLDER_ID</code></td><td>No — opt-in</td><td>"Mother's Day Edition": personal recipe retrieval via RAG over a Drive folder</td></tr>
+        <tr><td><code>GOOGLE_SERVICE_ACCOUNT_EMAIL</code>, <code>GOOGLE_SERVICE_ACCOUNT_PRIVATE_KEY</code></td><td>Required only if the folder id above is set</td><td>Drive read-only access</td></tr>
+      </tbody>
+    </table>
+
+    <h2>Run a service</h2>
+    <pre><code>pnpm --filter @gracesoft-sentinel/concierge-service build
+pnpm --filter @gracesoft-sentinel/concierge-service start</code></pre>
+    <p>Or bring up Redis, Postgres, and both services together:</p>
+    <pre><code>docker compose up --build</code></pre>
+
+    <h2>Verify it's alive</h2>
+    <pre><code>curl http://localhost:3000/health
+curl http://localhost:3000/ready</code></pre>
+    <p><code>/health</code> always returns <code>200</code> once the process is up. <code>/ready</code> actually pings Redis and Postgres and returns <code>503</code> if either is unreachable — point your orchestrator's readiness probe at this one, not <code>/health</code>.</p>
+
+    <h2>Workspace commands</h2>
+    <p>Useful when developing against this repo rather than just running a built service:</p>
+    <table>
+      <tbody>
+        <tr><td><code>pnpm build</code></td><td>Compile every package</td></tr>
+        <tr><td><code>pnpm test</code></td><td>Run every package's test suite</td></tr>
+        <tr><td><code>pnpm lint</code></td><td>ESLint across the workspace</td></tr>
+        <tr><td><code>pnpm typecheck</code></td><td>TypeScript, no emit</td></tr>
+        <tr><td><code>pnpm boundaries</code></td><td>Package-boundary enforcement (dependency-cruiser)</td></tr>
+      </tbody>
+    </table>
+
+    <div class="footer-nav">
+      <span><span class="label">Previous</span><a href="index.html">← Overview</a></span>
+      <span class="next"><span class="label">Next</span><a href="webhooks.html">Webhooks &amp; endpoints →</a></span>
+    </div>
+  </main>
+</div>
+
+<script src="assets/docs.js"></script>
+</body>
+</html>

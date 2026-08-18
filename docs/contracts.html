@@ -1,0 +1,171 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Data Contracts — GraceSoft Sentinel Chat API Docs</title>
+<link rel="icon" href="assets/logo-square.png">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Montserrat:wght@400;500;600;700&family=Playfair+Display:wght@600;700&family=Source+Code+Pro:wght@400;500&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="assets/style.css">
+</head>
+<body>
+
+<header class="topbar">
+  <a class="topbar-brand" href="index.html">
+    <img id="brand-logo" src="assets/wm.svg" alt="GraceSoft Sentinel" height="22">
+  </a>
+  <div class="topbar-actions">
+    <a href="../README.md">Repository README</a>
+    <button id="theme-toggle" class="theme-toggle" type="button">Dark mode</button>
+  </div>
+</header>
+
+<div class="shell">
+  <nav class="sidebar">
+    <div class="sidebar-group">
+      <h5>Start here</h5>
+      <ul>
+        <li><a href="index.html">Overview</a></li>
+        <li><a href="getting-started.html">Getting started</a></li>
+      </ul>
+    </div>
+    <div class="sidebar-group">
+      <h5>Reference</h5>
+      <ul>
+        <li><a href="webhooks.html">Webhooks &amp; endpoints</a></li>
+        <li><a href="contracts.html">Data contracts</a></li>
+        <li><a href="contracts.html#normalized-message" class="sub">NormalizedMessage</a></li>
+        <li><a href="contracts.html#normalized-response" class="sub">NormalizedResponse</a></li>
+        <li><a href="contracts.html#conversation-state" class="sub">ConversationState</a></li>
+        <li><a href="contracts.html#business-config" class="sub">BusinessConfig</a></li>
+        <li><a href="contracts.html#providers" class="sub">Provider interfaces</a></li>
+        <li><a href="multi-tenant.html">Multi-tenant setup</a></li>
+      </ul>
+    </div>
+  </nav>
+
+  <main>
+    <div class="page-header">
+      <h1>Data contracts</h1>
+      <p class="lede">Every interface below lives in <code>@gracesoft-sentinel/core</code> and is defined with <a href="https://zod.dev">Zod</a> — the schema <em>is</em> the type, and every implementation is checked against a shared contract test suite so behavior stays consistent regardless of which channel/provider is plugged in.</p>
+    </div>
+
+    <h2 id="normalized-message">NormalizedMessage</h2>
+    <p>What every <code>ChannelAdapter.parseInbound()</code> produces from a channel's raw webhook payload. Agents only ever see this shape — never WhatsApp/Telegram/Twilio's own payload structure.</p>
+    <pre><code>{
+  id: string;
+  channel: string;                 // "whatsapp" | "telegram" | "sms" | ...
+  senderId: string;                // the chatter's own id on that channel
+  timestamp: string;               // ISO 8601
+  text?: string;
+  media?: {
+    type: "image" | "audio" | "video" | "document";
+    url?: string;                  // always a data: URI once resolved — see note below
+    mimeType?: string;
+    caption?: string;
+  }[];
+  quickReplyId?: string;           // id of a button/list item the sender tapped, if any
+  businessChannelId?: string;      // which of the *business's* channel identities received this
+  raw: unknown;                    // untouched source payload, for edge cases/debugging
+}</code></pre>
+    <div class="callout">Media <code>url</code>s are always resolved server-side into a base64 <code>data:</code> URI before an agent sees them — never a bare channel CDN link. WhatsApp/Telegram/Twilio media URLs need an auth header or token to fetch, which shouldn't leak to a third-party AI provider's own outbound fetch.</div>
+    <p><code>businessChannelId</code> carries the WhatsApp <code>phone_number_id</code> or Twilio <code>To</code> number a message arrived on — the mechanism a single deployment uses to tell tenants apart. See <a href="multi-tenant.html">Multi-tenant setup</a>. It's <code>undefined</code> on Telegram, whose bot identity lives in its webhook URL/token rather than the update payload.</p>
+
+    <h2 id="normalized-response">NormalizedResponse</h2>
+    <p>What an agent returns, translated back into a channel-specific payload by <code>ChannelAdapter.formatOutbound()</code>.</p>
+    <pre><code>{
+  text?: string;
+  quickReplies?: { id: string; label: string }[];
+  media?: NormalizedMedia[];
+  meta?: Record&lt;string, unknown&gt;;  // channel-specific extensions that don't warrant a core field
+}</code></pre>
+    <p>Channels with no native interactive UI (SMS) degrade <code>quickReplies</code> to a numbered plain-text list; the agent's own free-text selection fallback resolves a typed number back to the intended choice.</p>
+
+    <h2 id="conversation-state">ConversationState</h2>
+    <p>The session shape persisted between messages (Redis-backed by default). <code>context</code> is an intentionally open bag — each agent owns the shape of its own in-progress state without <code>core</code> needing to know about it.</p>
+    <pre><code>{
+  sessionId: string;
+  channel: string;
+  userId: string;
+  agent: string;
+  createdAt: string;   // ISO 8601
+  updatedAt: string;
+  context: Record&lt;string, unknown&gt;;
+}</code></pre>
+    <p>Session ids are scoped by tenant, channel, and sender (<code>concierge:&lt;tenant&gt;:&lt;channel&gt;:&lt;senderId&gt;</code>) so the same person messaging two different businesses — or the same business over two different channels — never shares state across them.</p>
+
+    <h2 id="business-config">BusinessConfig</h2>
+    <p>One config shape both agents consume, resolved by the service layer per business.</p>
+    <pre><code>{
+  businessId: string;
+  timezone: string;              // IANA, e.g. "Asia/Singapore"
+  faqBlueprintPath: string;      // path to this business's FAQ grounding content
+  calendarId: string;            // Google Calendar id
+  businessHours: {
+    timezone: string;
+    weekly: {                    // mon..sun, null = closed that day
+      mon: { open: string; close: string } | null;
+      // ... tue..sun
+    };
+    exceptions: {                 // dated overrides — public holidays etc.
+      date: string;               // "YYYY-MM-DD"
+      hours: { open: string; close: string } | null;  // null = closed all day
+      reason?: string;
+    }[];
+  };
+}</code></pre>
+
+    <h2 id="providers">Provider interfaces</h2>
+    <p>These are what an agent depends on instead of a concrete SDK — <code>agent-concierge</code>/<code>agent-cook</code> never import OpenAI, Google, or any channel package directly (enforced by a static boundary check, not just convention).</p>
+
+    <h3>ChannelAdapter</h3>
+    <pre><code>interface ChannelAdapter {
+  channel: string;
+  parseInbound(payload: unknown): Promise&lt;NormalizedMessage&gt;;
+  formatOutbound(response: NormalizedResponse, context: { recipientId: string }): unknown;
+}</code></pre>
+    <p>Implemented by <code>channel-whatsapp</code>, <code>channel-telegram</code>, <code>channel-sms</code>.</p>
+
+    <h3>AIProvider</h3>
+    <pre><code>interface AIProvider {
+  chatComplete(input: { messages: {role, content}[]; temperature?; maxTokens? }): Promise&lt;{ text: string }&gt;;
+  visionAnalyze(input: { image: {url} | {base64, mimeType}; prompt? }): Promise&lt;{ text: string }&gt;;
+  embed(input: { input: string | string[] }): Promise&lt;{ vectors: number[][] }&gt;;
+  transcribeAudio(input: { audio: {url} | {base64, mimeType}; language? }): Promise&lt;{ text: string }&gt;;
+}</code></pre>
+    <p>Implemented by <code>provider-ai-openai</code> (chat/vision via GPT models, transcription via Whisper) and <code>provider-ai-gemini</code>. <code>embed</code> is why Gemini was chosen as the second provider over Anthropic — Anthropic has no native embeddings API, and every implementation must satisfy the full interface.</p>
+
+    <h3>CalendarProvider</h3>
+    <pre><code>interface CalendarProvider {
+  getAvailability(input: { calendarId, from, to, timezone }): Promise&lt;{ start: string; end: string }[]&gt;;
+  createBooking(input: { calendarId, start, end, timezone, summary, attendee? }): Promise&lt;{ id, start, end }&gt;;
+  getBusinessHours(input: { calendarId }): Promise&lt;BusinessHours&gt;;
+}</code></pre>
+    <p>Implemented by <code>provider-calendar-google</code> (Google Calendar).</p>
+
+    <h3>SessionStore</h3>
+    <pre><code>interface SessionStore {
+  get(sessionId: string): Promise&lt;ConversationState | null&gt;;
+  set(state: ConversationState, ttlSeconds?: number): Promise&lt;void&gt;;
+  delete(sessionId: string): Promise&lt;void&gt;;
+}</code></pre>
+    <p>Implemented by <code>provider-session-redis</code>.</p>
+
+    <h3>RecipeSourceProvider</h3>
+    <pre><code>interface RecipeSourceProvider {
+  findRecipes(input: { query: string }): Promise&lt;{ id: string; title: string; raw?: unknown }[]&gt;;
+}</code></pre>
+    <p>Implemented by <code>provider-drive-google</code> — retrieves a personal recipe from a Google Drive folder via embeddings-based semantic search (RAG) rather than AI generation. Optional: <code>agent-cook</code> only takes this path when a provider is actually configured (<code>GOOGLE_DRIVE_RECIPES_FOLDER_ID</code>), and the matched document's content is returned verbatim — it's the user's own free text, not a structured recipe.</p>
+
+    <div class="footer-nav">
+      <span><span class="label">Previous</span><a href="webhooks.html">← Webhooks &amp; endpoints</a></span>
+      <span class="next"><span class="label">Next</span><a href="multi-tenant.html">Multi-tenant setup →</a></span>
+    </div>
+  </main>
+</div>
+
+<script src="assets/docs.js"></script>
+</body>
+</html>

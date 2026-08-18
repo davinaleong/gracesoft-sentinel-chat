@@ -1,0 +1,116 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Webhooks &amp; Endpoints — GraceSoft Sentinel Chat API Docs</title>
+<link rel="icon" href="assets/logo-square.png">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Montserrat:wght@400;500;600;700&family=Playfair+Display:wght@600;700&family=Source+Code+Pro:wght@400;500&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="assets/style.css">
+</head>
+<body>
+
+<header class="topbar">
+  <a class="topbar-brand" href="index.html">
+    <img id="brand-logo" src="assets/wm.svg" alt="GraceSoft Sentinel" height="22">
+  </a>
+  <div class="topbar-actions">
+    <a href="../README.md">Repository README</a>
+    <button id="theme-toggle" class="theme-toggle" type="button">Dark mode</button>
+  </div>
+</header>
+
+<div class="shell">
+  <nav class="sidebar">
+    <div class="sidebar-group">
+      <h5>Start here</h5>
+      <ul>
+        <li><a href="index.html">Overview</a></li>
+        <li><a href="getting-started.html">Getting started</a></li>
+      </ul>
+    </div>
+    <div class="sidebar-group">
+      <h5>Reference</h5>
+      <ul>
+        <li><a href="webhooks.html">Webhooks &amp; endpoints</a></li>
+        <li><a href="webhooks.html#health" class="sub">Health &amp; readiness</a></li>
+        <li><a href="webhooks.html#whatsapp" class="sub">WhatsApp</a></li>
+        <li><a href="webhooks.html#telegram" class="sub">Telegram</a></li>
+        <li><a href="webhooks.html#sms" class="sub">SMS (Twilio)</a></li>
+        <li><a href="contracts.html">Data contracts</a></li>
+        <li><a href="multi-tenant.html">Multi-tenant setup</a></li>
+      </ul>
+    </div>
+  </nav>
+
+  <main>
+    <div class="page-header">
+      <h1>Webhooks &amp; endpoints</h1>
+      <p class="lede">Every HTTP route exposed by <code>concierge-service</code> and <code>cook-service</code>. Both services expose the identical set of routes — only the agent behind them differs.</p>
+    </div>
+
+    <div class="callout">Every webhook route is rate limited to <strong>120 requests per minute per source IP</strong> (a floor against abuse/flooding — legitimate traffic here comes from the channel provider's own delivery servers, not directly from end users). Requests over the limit get <code>429</code>.</div>
+
+    <div class="callout warn"><strong>Enable one messaging channel per service instance.</strong> Both routers currently mount at the same <code>/webhook</code> path on the same Express app, so running WhatsApp and Telegram simultaneously on one <code>concierge-service</code>/<code>cook-service</code> process is not yet a supported configuration — run separate instances (or separate ports behind your own reverse proxy) if you need more than one channel live at once.</div>
+
+    <h2 id="health">Health &amp; readiness</h2>
+
+    <div class="endpoint">
+      <div class="endpoint-title"><span class="method get">GET</span><span class="endpoint-path">/health</span></div>
+      <p>Always <code>200</code> once the process has started — a liveness check, not a dependency check.</p>
+      <pre><code>{ "status": "ok" }</code></pre>
+    </div>
+
+    <div class="endpoint">
+      <div class="endpoint-title"><span class="method get">GET</span><span class="endpoint-path">/ready</span></div>
+      <p>Pings Redis and Postgres. Returns <code>200</code> only if both respond; <code>503</code> otherwise. Point your orchestrator's readiness probe here, not at <code>/health</code>.</p>
+      <pre><code>200  { "status": "ready" }
+503  { "status": "not ready" }</code></pre>
+    </div>
+
+    <h2 id="whatsapp">WhatsApp</h2>
+    <p>Active only when <code>WHATSAPP_ENABLED=true</code>. Requires <code>WHATSAPP_PHONE_NUMBER_ID</code>, <code>WHATSAPP_ACCESS_TOKEN</code>, <code>WHATSAPP_APP_SECRET</code>, and <code>WHATSAPP_WEBHOOK_VERIFY_TOKEN</code>.</p>
+
+    <div class="endpoint">
+      <div class="endpoint-title"><span class="method get">GET</span><span class="endpoint-path">/webhook</span></div>
+      <p>The one-time verification handshake Meta performs when you register the webhook URL in the WhatsApp Business Platform console. Meta calls this with:</p>
+      <pre><code>GET /webhook?hub.mode=subscribe&amp;hub.verify_token=YOUR_TOKEN&amp;hub.challenge=1234567</code></pre>
+      <p>If <code>hub.mode=subscribe</code> and <code>hub.verify_token</code> matches your configured <code>WHATSAPP_WEBHOOK_VERIFY_TOKEN</code>, the server echoes <code>hub.challenge</code> back with <code>200</code>. Otherwise it returns <code>403</code>.</p>
+    </div>
+
+    <div class="endpoint">
+      <div class="endpoint-title"><span class="method post">POST</span><span class="endpoint-path">/webhook</span></div>
+      <p>Receives inbound message/status payloads from the WhatsApp Cloud API. Every request must carry a valid <code>X-Hub-Signature-256</code> header — HMAC-SHA256 of the <em>raw</em> request body, keyed by <code>WHATSAPP_APP_SECRET</code>, hex-encoded and prefixed <code>sha256=</code>. A missing or invalid signature gets <code>403</code>.</p>
+      <p>On a valid signature, the server responds <code>200</code> immediately (Meta expects an ack within a few seconds and retries otherwise), then asynchronously: normalizes the message, runs it through the agent, formats the reply for WhatsApp, and sends it back via the Cloud API's own send-message endpoint. Status-update pings (delivery receipts etc., no <code>messages</code> array) are acknowledged and dropped — nothing is sent to the agent for those.</p>
+    </div>
+
+    <h2 id="telegram">Telegram</h2>
+    <p>Active only when <code>TELEGRAM_ENABLED=true</code>. Requires <code>TELEGRAM_BOT_TOKEN</code> and <code>TELEGRAM_WEBHOOK_SECRET</code>. Unlike WhatsApp, Telegram has no GET handshake — you register the webhook URL yourself, once, via a direct call to Telegram's <code>setWebhook</code> API (passing your chosen secret token), rather than the channel initiating a handshake against you.</p>
+
+    <div class="endpoint">
+      <div class="endpoint-title"><span class="method post">POST</span><span class="endpoint-path">/webhook</span></div>
+      <p>Receives Telegram <a href="https://core.telegram.org/bots/api#update">Update</a> objects. Every request must carry <code>X-Telegram-Bot-Api-Secret-Token</code> matching your configured <code>TELEGRAM_WEBHOOK_SECRET</code> exactly (constant-time compared) — a missing or mismatched header gets <code>403</code>.</p>
+      <p>Responds <code>200</code> immediately, then asynchronously normalizes, runs the agent, and replies via the Bot API's <code>sendMessage</code>/<code>sendPhoto</code>. Updates with no <code>message</code> or <code>callback_query</code> (e.g. edited-message notifications) are acknowledged and dropped.</p>
+    </div>
+
+    <h2 id="sms">SMS / MMS (Twilio)</h2>
+    <p><code>channel-sms</code> implements the same <code>ChannelAdapter</code> contract as WhatsApp and Telegram and ships with its own webhook router, but — unlike the two above — it isn't pre-wired into <code>concierge-service</code>/<code>cook-service</code>'s <code>server.ts</code> today. Compose <code>createSmsWebhookRouter()</code> yourself following the same pattern the WhatsApp/Telegram branches use if you need SMS live.</p>
+
+    <div class="endpoint">
+      <div class="endpoint-title"><span class="method post">POST</span><span class="endpoint-path">/webhook</span></div>
+      <p>Receives Twilio's <code>application/x-www-form-urlencoded</code> inbound-message POST (not JSON). Every request must carry a valid <code>X-Twilio-Signature</code> header: HMAC-SHA1, base64-encoded, of the exact webhook URL with each POST parameter's key+value appended in sorted-key order, keyed by your Twilio auth token — <a href="https://www.twilio.com/docs/usage/webhooks/webhooks-security">Twilio's own signature scheme</a>. The exact externally-visible URL Twilio was configured with must be supplied to the router explicitly (it isn't reliably reconstructable from the request when the service sits behind a proxy).</p>
+      <p>Responds <code>200</code> with an empty <code>&lt;Response&gt;&lt;/Response&gt;</code> TwiML body immediately, then asynchronously normalizes and runs the agent. Quick replies degrade to a plain-text numbered list on this channel — the chatter replies with a number, resolved by the agent's existing free-text selection fallback.</p>
+    </div>
+
+    <div class="footer-nav">
+      <span><span class="label">Previous</span><a href="getting-started.html">← Getting started</a></span>
+      <span class="next"><span class="label">Next</span><a href="contracts.html">Data contracts →</a></span>
+    </div>
+  </main>
+</div>
+
+<script src="assets/docs.js"></script>
+</body>
+</html>

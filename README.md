@@ -74,6 +74,14 @@ Each service under `apps/` needs its own `.env` (see the `.env.example` in that 
 docker compose up --build
 ```
 
+## API documentation
+
+[`docs/`](docs/index.html) has a branded HTML reference covering webhook endpoints per channel (auth requirements, payload handling), the core data contracts (`NormalizedMessage`, `BusinessConfig`, provider interfaces), and multi-tenant setup. Open `docs/index.html` directly in a browser, or serve it locally:
+
+```bash
+npx serve docs
+```
+
 ## Contracts and testing philosophy
 
 Every interface in `core` ships with a shared contract test suite (e.g. `runChannelAdapterContractTests`, `runAIProviderContractTests`) that every implementation runs against — so a WhatsApp adapter and a from-scratch SMS adapter are held to the exact same behavioral guarantees. Package boundaries (no agent importing a concrete channel/provider, no package reaching into another's internals) are enforced by `.dependency-cruiser.cjs` and checked in CI (`.github/workflows/ci.yml`).
