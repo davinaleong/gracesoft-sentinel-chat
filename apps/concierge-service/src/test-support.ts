@@ -13,6 +13,8 @@ import type {
   GetAvailabilityInput,
   GetBusinessHoursInput,
   SessionStore,
+  TranscribeAudioInput,
+  TranscribeAudioResult,
   VisionAnalyzeInput,
   VisionAnalyzeResult,
 } from "@gracesoft-sentinel/core";
@@ -53,6 +55,9 @@ export class FakeAiProvider implements AIProvider {
   }
   async embed(_input: EmbedInput): Promise<EmbedResult> {
     return { vectors: [[0, 0, 0]] };
+  }
+  async transcribeAudio(_input: TranscribeAudioInput): Promise<TranscribeAudioResult> {
+    return { text: "fake transcription" };
   }
 }
 

@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest";
 import type { ConversationState, NormalizedMessage } from "@gracesoft-sentinel/core";
 import { handleMessage } from "./handle-message.js";
 import type { CookContext } from "./handle-message.js";
-import { fakeAiProviderHappyPath, fakeAiProviderUnidentified, fakeAiProviderWith } from "./test-support.js";
+import { fakeAiProviderHappyPath, fakeAiProviderUnidentified, fakeAiProviderWith, fakeAiProviderWithTranscription } from "./test-support.js";
 
 function makeMessage(overrides: Partial<NormalizedMessage> = {}): NormalizedMessage {
   return {
@@ -154,5 +154,71 @@ describe("handleMessage — dietary adjustment", () => {
       aiProvider: fakeAiProviderHappyPath(),
     });
     expect(result.response.text).toMatch(/send me a photo/i);
+  });
+});
+
+describe("handleMessage — voice notes", () => {
+  function voiceMessage(url = "https://example.com/voice-note.ogg"): NormalizedMessage {
+    return makeMessage({ media: [{ type: "audio", url }] });
+  }
+
+  it("a spoken dietary adjustment transcribes and modifies the last recipe, same as typed text", async () => {
+    const lastRecipe = {
+      dishName: "Chicken Rice",
+      servings: 2,
+      ingredients: ["2 chicken thighs", "jasmine rice"],
+      steps: ["Poach chicken.", "Cook rice."],
+      substitutions: [],
+      servingSuggestions: [],
+      nutrition: { calories: 550, protein: "35g", carbohydrates: "60g", fat: "15g", fiber: "2g" },
+    };
+    const vegetarianJson = JSON.stringify({
+      dishName: "Chicken Rice",
+      servings: 2,
+      ingredients: ["tofu", "jasmine rice"],
+      steps: ["Cook tofu.", "Cook rice."],
+      substitutions: [],
+      servingSuggestions: [],
+      nutrition: { calories: 400, protein: "15g", carbohydrates: "60g", fat: "10g", fiber: "3g" },
+    });
+    const aiProvider = fakeAiProviderWith(
+      () => ({ text: vegetarianJson }),
+      () => ({ text: "unused" })
+    );
+    aiProvider.transcribeAudio = async () => ({ text: "can you make it vegetarian?" });
+
+    const result = await handleMessage({ message: voiceMessage(), state: makeState({ lastRecipe }), aiProvider });
+
+    expect(result.response.text).toContain("tofu");
+    expect((result.state.context as CookContext).lastRecipe?.ingredients).toContain("tofu");
+  });
+
+  it("a voice note with no prior recipe and no dietary keywords falls through to prompting for a photo", async () => {
+    const aiProvider = fakeAiProviderWithTranscription("hello there");
+    const result = await handleMessage({ message: voiceMessage(), state: makeState(), aiProvider });
+    expect(aiProvider.transcribeAudioCalls).toEqual([{ audio: { url: "https://example.com/voice-note.ogg" } }]);
+    expect(result.response.text).toMatch(/send me a photo/i);
+  });
+
+  it("degrades gracefully, without a silent failure, when transcription itself fails", async () => {
+    const aiProvider = fakeAiProviderHappyPath();
+    aiProvider.transcribeAudio = async () => {
+      throw new Error("upstream transcription service down");
+    };
+    const result = await handleMessage({ message: voiceMessage(), state: makeState(), aiProvider });
+    expect(result.response.text).toMatch(/couldn't process that voice note/i);
+  });
+
+  it("a photo takes priority over a voice note if a message somehow carries both", async () => {
+    const message = makeMessage({
+      media: [
+        { type: "image", url: "https://example.com/dish.jpg" },
+        { type: "audio", url: "https://example.com/voice-note.ogg" },
+      ],
+    });
+    const aiProvider = fakeAiProviderHappyPath();
+    const result = await handleMessage({ message, state: makeState(), aiProvider });
+    expect(aiProvider.transcribeAudioCalls).toHaveLength(0);
+    expect(result.response.text).toContain("Chicken Rice");
   });
 });

@@ -5,6 +5,8 @@ import type {
   ChatMessage,
   EmbedInput,
   EmbedResult,
+  TranscribeAudioInput,
+  TranscribeAudioResult,
   VisionAnalyzeInput,
   VisionAnalyzeResult,
 } from "@gracesoft-sentinel/core";
@@ -18,7 +20,7 @@ export interface GeminiProviderConfig {
   model?: string;
   visionModel?: string;
   embeddingModel?: string;
-  /** Override point for a mocked HTTP layer when resolving a `{url}` image — contract tests use this, not live network calls. */
+  /** Override point for a mocked HTTP layer when resolving a `{url}` image/audio input — contract tests use this, not live network calls. */
   fetch?: typeof fetch;
 }
 
@@ -40,11 +42,12 @@ function toGeminiContents(messages: ChatMessage[]): { systemInstruction?: string
   return { systemInstruction: systemParts.length > 0 ? systemParts.join("\n\n") : undefined, contents };
 }
 
-async function toInlineImagePart(image: VisionAnalyzeInput["image"], fetchImpl: typeof fetch): Promise<GeminiPart> {
-  if ("base64" in image) {
-    return { inlineData: { mimeType: image.mimeType, data: image.base64 } };
+/** Shared by `visionAnalyze` and `transcribeAudio` — both accept the same `{url} | {base64,mimeType}` input shape. */
+async function toInlineDataPart(media: { url: string } | { base64: string; mimeType: string }, fetchImpl: typeof fetch): Promise<GeminiPart> {
+  if ("base64" in media) {
+    return { inlineData: { mimeType: media.mimeType, data: media.base64 } };
   }
-  const response = await fetchImpl(image.url);
+  const response = await fetchImpl(media.url);
   const mimeType = response.headers.get("content-type") ?? "application/octet-stream";
   const bytes = Buffer.from(await response.arrayBuffer());
   return { inlineData: { mimeType, data: bytes.toString("base64") } };
@@ -86,7 +89,7 @@ export class GeminiProvider implements AIProvider {
   }
 
   async visionAnalyze(input: VisionAnalyzeInput): Promise<VisionAnalyzeResult> {
-    const imagePart = await toInlineImagePart(input.image, this.fetchImpl);
+    const imagePart = await toInlineDataPart(input.image, this.fetchImpl);
     const parts: GeminiPart[] = input.prompt ? [{ text: input.prompt }, imagePart] : [imagePart];
     const result = await this.client.generateContent({ model: this.visionModel, contents: [{ role: "user", parts }] });
     return { text: result.text };
@@ -98,6 +101,21 @@ export class GeminiProvider implements AIProvider {
       inputs.map((text) => this.client.embedContent({ model: this.embeddingModel, text }).then((r) => r.values))
     );
     return { vectors };
+  }
+
+  async transcribeAudio(input: TranscribeAudioInput): Promise<TranscribeAudioResult> {
+    const audioPart = await toInlineDataPart(input.audio, this.fetchImpl);
+    const languageHint = input.language ? ` The audio is in language code "${input.language}".` : "";
+    const result = await this.client.generateContent({
+      model: this.model,
+      contents: [
+        {
+          role: "user",
+          parts: [{ text: `Transcribe this audio verbatim. Output only the transcription text, no commentary, no timestamps.${languageHint}` }, audioPart],
+        },
+      ],
+    });
+    return { text: result.text };
   }
 }
 

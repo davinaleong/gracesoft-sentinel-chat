@@ -27,6 +27,13 @@ function mockOpenAiFetch(): NonNullable<OpenAIProviderConfig["fetch"]> {
       );
     }
 
+    if (url.includes("/audio/transcriptions")) {
+      return new Response(JSON.stringify({ text: "Can I book a slot for tomorrow at 2pm?" }), {
+        status: 200,
+        headers: { "content-type": "application/json" },
+      });
+    }
+
     // Chat completions endpoint — covers both chatComplete and visionAnalyze.
     return new Response(
       JSON.stringify({
@@ -57,6 +64,30 @@ describe("OpenAIProvider — request shaping", () => {
     const provider = new OpenAIProvider({ apiKey: "test-key", fetch: mockOpenAiFetch() });
     const result = await provider.embed({ input: ["a", "b"] });
     expect(result.vectors).toHaveLength(2);
+  });
+
+  it("transcribeAudio decodes base64 audio and returns the transcribed text", async () => {
+    const provider = new OpenAIProvider({ apiKey: "test-key", fetch: mockOpenAiFetch() });
+    const result = await provider.transcribeAudio({ audio: { base64: Buffer.from("fake audio bytes").toString("base64"), mimeType: "audio/ogg" } });
+    expect(result.text).toBe("Can I book a slot for tomorrow at 2pm?");
+  });
+
+  it("transcribeAudio downloads a {url} audio clip before transcribing it", async () => {
+    const calls: string[] = [];
+    const fetchStub = (async (input: unknown) => {
+      const url = String(input);
+      calls.push(url);
+      if (url === "https://example.com/voice-note.ogg") {
+        return new Response(new Uint8Array([1, 2, 3]), { status: 200, headers: { "content-type": "audio/ogg" } });
+      }
+      return mockOpenAiFetch()(input as never);
+    }) as unknown as NonNullable<OpenAIProviderConfig["fetch"]>;
+
+    const provider = new OpenAIProvider({ apiKey: "test-key", fetch: fetchStub });
+    const result = await provider.transcribeAudio({ audio: { url: "https://example.com/voice-note.ogg" } });
+
+    expect(calls).toContain("https://example.com/voice-note.ogg");
+    expect(result.text).toBe("Can I book a slot for tomorrow at 2pm?");
   });
 });
 

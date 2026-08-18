@@ -48,6 +48,22 @@ export const EmbedResultSchema = z.object({
 });
 export type EmbedResult = z.infer<typeof EmbedResultSchema>;
 
+export const TranscribeAudioInputSchema = z.object({
+  audio: z.union([
+    z.object({ url: z.string() }),
+    z.object({ base64: z.string(), mimeType: z.string() }),
+  ]),
+  /** BCP-47 language hint, e.g. "en" — providers may use this to improve accuracy. */
+  language: z.string().optional(),
+});
+export type TranscribeAudioInput = z.infer<typeof TranscribeAudioInputSchema>;
+
+export const TranscribeAudioResultSchema = z.object({
+  text: z.string(),
+  raw: z.unknown().optional(),
+});
+export type TranscribeAudioResult = z.infer<typeof TranscribeAudioResultSchema>;
+
 /**
  * Provider-agnostic AI capability surface. Agents depend on this interface
  * only — never on a concrete SDK (OpenAI, Anthropic, etc).
@@ -56,6 +72,7 @@ export interface AIProvider {
   chatComplete(input: ChatCompleteInput): Promise<ChatCompleteResult>;
   visionAnalyze(input: VisionAnalyzeInput): Promise<VisionAnalyzeResult>;
   embed(input: EmbedInput): Promise<EmbedResult>;
+  transcribeAudio(input: TranscribeAudioInput): Promise<TranscribeAudioResult>;
 }
 
 /**
@@ -95,6 +112,13 @@ export function runAIProviderContractTests(name: string, makeProvider: () => AIP
         expect(vector.length).toBe(firstDimension);
         expect(vector.length).toBeGreaterThan(0);
       }
+    });
+
+    it("transcribeAudio returns non-empty text for an audio clip", async () => {
+      const provider = await makeProvider();
+      const result = await provider.transcribeAudio({ audio: { url: "https://example.com/voice-note.ogg" } });
+      expect(TranscribeAudioResultSchema.safeParse(result).success).toBe(true);
+      expect(result.text.length).toBeGreaterThan(0);
     });
   });
 }

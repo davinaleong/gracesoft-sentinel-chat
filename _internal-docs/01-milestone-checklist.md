@@ -261,7 +261,7 @@ Carry forward the reliability work already validated in the original plan, now a
 * [ ] Mother's Day Edition: `provider-drive-google` + embeddings/RAG for personal recipe retrieval
 * [x] Additional AI provider (Anthropic/Gemini) as second `AIProvider` implementation — went with Gemini over Anthropic: Anthropic has no native embeddings API, and `embed` is part of the `AIProvider` contract every implementation must satisfy
 * [x] Additional channel (e.g. Instagram DMs, SMS) as third `ChannelAdapter` implementation — went with SMS via Twilio: simpler/better-documented webhook model than Instagram's Graph API, and it proves the abstraction against a channel with genuinely *less* capability (plain text only, no interactive UI)
-* [ ] Voice note input handling
+* [x] Voice note input handling — `AIProvider.transcribeAudio` (new core capability, implemented in both `provider-ai-openai` via Whisper and `provider-ai-gemini`), wired into both `agent-concierge` and `agent-cook`; no channel-layer changes needed since `NormalizedMedia`'s `"audio"` type already existed from Milestone 1
 * [ ] Meal planning / grocery list generation (Cook)
 
 ---

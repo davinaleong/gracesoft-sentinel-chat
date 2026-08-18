@@ -4,6 +4,8 @@ import type {
   ChatCompleteResult,
   EmbedInput,
   EmbedResult,
+  TranscribeAudioInput,
+  TranscribeAudioResult,
   VisionAnalyzeInput,
   VisionAnalyzeResult,
 } from "@gracesoft-sentinel/core";
@@ -11,10 +13,12 @@ import type {
 class FakeAiProvider implements AIProvider {
   public chatCompleteCalls: ChatCompleteInput[] = [];
   public visionAnalyzeCalls: VisionAnalyzeInput[] = [];
+  public transcribeAudioCalls: TranscribeAudioInput[] = [];
 
   constructor(
     private readonly makeChatResult: (input: ChatCompleteInput) => ChatCompleteResult,
-    private readonly makeVisionResult: (input: VisionAnalyzeInput) => VisionAnalyzeResult
+    private readonly makeVisionResult: (input: VisionAnalyzeInput) => VisionAnalyzeResult,
+    private readonly makeTranscription?: (input: TranscribeAudioInput) => TranscribeAudioResult
   ) {}
 
   async chatComplete(input: ChatCompleteInput): Promise<ChatCompleteResult> {
@@ -29,6 +33,14 @@ class FakeAiProvider implements AIProvider {
 
   async embed(_input: EmbedInput): Promise<EmbedResult> {
     throw new Error("FakeAiProvider.embed is not implemented — not needed by these tests");
+  }
+
+  async transcribeAudio(input: TranscribeAudioInput): Promise<TranscribeAudioResult> {
+    this.transcribeAudioCalls.push(input);
+    if (!this.makeTranscription) {
+      throw new Error("FakeAiProvider.transcribeAudio is not configured — pass makeTranscription to use it");
+    }
+    return this.makeTranscription(input);
   }
 }
 
@@ -66,4 +78,13 @@ export function fakeAiProviderWith(
   makeVisionResult: (input: VisionAnalyzeInput) => VisionAnalyzeResult
 ): FakeAiProvider {
   return new FakeAiProvider(makeChatResult, makeVisionResult);
+}
+
+/** A fake that transcribes any voice note to a fixed string, and otherwise happy-paths chat/vision. */
+export function fakeAiProviderWithTranscription(transcribedText: string): FakeAiProvider {
+  return new FakeAiProvider(
+    () => ({ text: DEFAULT_RECIPE_JSON }),
+    () => ({ text: JSON.stringify({ dishName: "Chicken Rice" }) }),
+    () => ({ text: transcribedText })
+  );
 }

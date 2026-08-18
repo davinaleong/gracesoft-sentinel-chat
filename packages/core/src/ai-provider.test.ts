@@ -18,6 +18,10 @@ class FakeAIProvider implements AIProvider {
     const items = Array.isArray(input.input) ? input.input : [input.input];
     return { vectors: items.map((item) => [item.length, 1, 0]) };
   }
+
+  async transcribeAudio() {
+    return { text: "Can I book a slot for tomorrow at 2pm?" };
+  }
 }
 
 runAIProviderContractTests("FakeAIProvider (self-test)", () => new FakeAIProvider());

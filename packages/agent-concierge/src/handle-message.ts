@@ -252,8 +252,48 @@ function escalate(
   };
 }
 
+const VOICE_NOTE_FAILED_MESSAGE = "Sorry, I couldn't process that voice note. Could you try typing your message instead?";
+
+/**
+ * A voice note has no `text` — only `media` with an audio item. Transcribing
+ * it here (rather than at the channel/service layer) mirrors how
+ * `agent-cook` already owns its own `visionAnalyze` call for photos: each
+ * agent decides for itself which of `AIProvider`'s capabilities its inputs
+ * need, rather than the channel/service layer needing to know per-agent
+ * media-handling rules. Once transcribed, the resulting text flows through
+ * the exact same pipeline as a typed message — including the free-text
+ * slot-selection fallback, so "I'll take the second one" works whether
+ * typed or spoken.
+ */
+class VoiceNoteTranscriptionError extends Error {}
+
+async function resolveVoiceNote(message: NormalizedMessage, aiProvider: AIProvider): Promise<NormalizedMessage> {
+  if (message.text) return message;
+  const audio = message.media?.find((m) => m.type === "audio" && m.url);
+  if (!audio?.url) return message;
+
+  try {
+    const transcription = await aiProvider.transcribeAudio({ audio: { url: audio.url } });
+    return { ...message, text: transcription.text };
+  } catch (err) {
+    console.error("[agent-concierge] transcribeAudio failed:", err);
+    throw new VoiceNoteTranscriptionError();
+  }
+}
+
 async function handleMessageInner(input: ConciergeHandleMessageInput): Promise<ConciergeHandleMessageResult> {
-  const { message, businessConfig, calendarProvider, aiProvider, faqBlueprint } = input;
+  const { businessConfig, calendarProvider, aiProvider, faqBlueprint } = input;
+
+  let message: NormalizedMessage;
+  try {
+    message = await resolveVoiceNote(input.message, aiProvider);
+  } catch (err) {
+    if (err instanceof VoiceNoteTranscriptionError) {
+      return { response: { text: VOICE_NOTE_FAILED_MESSAGE }, state: input.state };
+    }
+    throw err;
+  }
+
   const now = businessNow(businessConfig.timezone, input.now);
   const context = (input.state.context ?? {}) as ConciergeContext;
 

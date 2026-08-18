@@ -5,6 +5,7 @@ import { formatSlotLabel } from "./booking-state.js";
 import {
   calendarWithBusyWindows,
   fakeAiProviderAnswering,
+  fakeAiProviderWithTranscription,
   fullyAvailableCalendarProvider,
   TEST_BUSINESS_CONFIG,
   TEST_FAQ_BLUEPRINT,
@@ -444,5 +445,103 @@ describe("handleMessage — AI disclosure", () => {
     });
 
     expect(second.response.text).not.toContain(OPENING_MESSAGE);
+  });
+});
+
+describe("handleMessage — voice notes", () => {
+  it("transcribes a voice note and routes it through the same booking pipeline as typed text", async () => {
+    const aiProvider = fakeAiProviderWithTranscription("Can I make a booking for this Saturday?");
+    const result = await handleMessage({
+      message: makeMessage({ media: [{ type: "audio", url: "https://example.com/voice-note.ogg" }] }),
+      state: makeDisclosedState(),
+      businessConfig: TEST_BUSINESS_CONFIG,
+      calendarProvider: fullyAvailableCalendarProvider(),
+      aiProvider,
+      faqBlueprint: TEST_FAQ_BLUEPRINT,
+      now: NOW,
+    });
+
+    expect(aiProvider.transcribeAudioCalls).toEqual([{ audio: { url: "https://example.com/voice-note.ogg" } }]);
+    // Same regression scenario as the typed-text version: 2 May is excluded, rollover lands on 4 May.
+    const context = result.state.context as ConciergeContext;
+    const firstOffered = dayjs(context.bookingCandidates![0]!.start).tz("Asia/Singapore");
+    expect(firstOffered.format("YYYY-MM-DD")).toBe("2026-05-04");
+  });
+
+  it("a spoken slot selection ('the second one') resolves via the same free-text ordinal fallback as typed text", async () => {
+    const calendarProvider = fullyAvailableCalendarProvider();
+    const aiProvider = fakeAiProviderWithTranscription("book something");
+    const first = await handleMessage({
+      message: makeMessage({ text: "book something" }),
+      state: makeDisclosedState(),
+      businessConfig: TEST_BUSINESS_CONFIG,
+      calendarProvider,
+      aiProvider,
+      faqBlueprint: TEST_FAQ_BLUEPRINT,
+      now: NOW,
+    });
+    const slot2 = (first.state.context as ConciergeContext).bookingCandidates![1]!;
+
+    aiProvider.transcribeAudioCalls.length = 0;
+    const second = await handleMessage({
+      message: makeMessage({ media: [{ type: "audio", url: "https://example.com/reply.ogg" }] }),
+      state: first.state,
+      businessConfig: TEST_BUSINESS_CONFIG,
+      calendarProvider,
+      aiProvider: fakeAiProviderWithTranscription("I'll take the second one"),
+      faqBlueprint: TEST_FAQ_BLUEPRINT,
+      now: NOW,
+    });
+
+    expect(second.response.text).toMatch(/you're booked/i);
+    expect(calendarProvider.createBookingCalls[0]!.start).toBe(slot2.start);
+  });
+
+  it("a voice note routes to the FAQ path when it has no booking intent", async () => {
+    const answerText = "We're open Monday to Friday 9am-6pm and Saturday 9am-1pm.";
+    const aiProvider = fakeAiProviderWithTranscription("What are your opening hours?", answerText, false);
+    const result = await handleMessage({
+      message: makeMessage({ media: [{ type: "audio", url: "https://example.com/voice-note.ogg" }] }),
+      state: makeDisclosedState(),
+      businessConfig: TEST_BUSINESS_CONFIG,
+      calendarProvider: fullyAvailableCalendarProvider(),
+      aiProvider,
+      faqBlueprint: TEST_FAQ_BLUEPRINT,
+      now: NOW,
+    });
+    expect(result.response.text).toBe(answerText);
+  });
+
+  it("degrades gracefully, without a silent failure, when transcription itself fails", async () => {
+    const aiProvider = fakeAiProviderAnswering("unused");
+    aiProvider.transcribeAudio = async () => {
+      throw new Error("upstream transcription service down");
+    };
+    const result = await handleMessage({
+      message: makeMessage({ media: [{ type: "audio", url: "https://example.com/voice-note.ogg" }] }),
+      state: makeDisclosedState(),
+      businessConfig: TEST_BUSINESS_CONFIG,
+      calendarProvider: fullyAvailableCalendarProvider(),
+      aiProvider,
+      faqBlueprint: TEST_FAQ_BLUEPRINT,
+      now: NOW,
+    });
+    expect(result.response.text).toMatch(/couldn't process that voice note/i);
+  });
+
+  it("ignores media that isn't audio (e.g. a photo) and falls through to the awaiting-input path normally", async () => {
+    const aiProvider = fakeAiProviderAnswering("unused");
+    const result = await handleMessage({
+      message: makeMessage({ media: [{ type: "image", url: "https://example.com/pic.jpg" }] }),
+      state: makeDisclosedState(),
+      businessConfig: TEST_BUSINESS_CONFIG,
+      calendarProvider: fullyAvailableCalendarProvider(),
+      aiProvider,
+      faqBlueprint: TEST_FAQ_BLUEPRINT,
+      now: NOW,
+    });
+    expect(aiProvider.transcribeAudioCalls).toHaveLength(0);
+    // No text and no booking intent -> falls through to FAQ, which escalates on an empty question.
+    expect(result.response.text).toBeDefined();
   });
 });

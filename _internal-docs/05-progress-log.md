@@ -4,6 +4,29 @@ Companion to `01-milestone-checklist.md`. One entry per work session, newest fir
 
 ---
 
+## 2026-08-13 — Milestone 11 (3/6): Voice note input handling
+
+**Status:** Three of six optional/future items done.
+
+**A real core interface change, done through the actual Changesets flow:** added `transcribeAudio(input): Promise<TranscribeAudioResult>` to `AIProvider` itself (+ `TranscribeAudioInput`/`TranscribeAudioResult` Zod schemas), rather than inventing a side-channel "transcription service" concept — voice notes are just another `AIProvider` capability, same tier as `chatComplete`/`visionAnalyze`/`embed`. `runAIProviderContractTests` now exercises it too, which is exactly why this ripples everywhere: **every** existing `AIProvider` implementation and test double had to add the method before anything would compile again — `provider-ai-openai`, `provider-ai-gemini`, `EchoAiProvider` (the Milestone 4 stub), and five separate `FakeAiProvider`/`UnusedAiProvider` test doubles across `agent-concierge`, `agent-cook`, both services, and the root cross-channel-parity test. TypeScript caught every single one at compile time — nothing was found by running tests, all of it by `tsc` refusing to build. `.changeset/transcribe-audio.md` → `pnpm changeset version`: core `0.2.0` → `0.3.0` (minor), dependents patch-bumped automatically, same flow as the `SessionStore` addition in Milestone 8.
+
+**Real implementations:**
+- `provider-ai-openai`: Whisper via `client.audio.transcriptions.create()`. The SDK wants a `File`-like object (`openai`'s own `toFile()` helper), not a URL, so a `{url}` input is downloaded first — same "fetch first, hand bytes to the SDK" shape as `visionAnalyze`'s `{url}` case. Verified against real SDK method/type names on the first `tsc` pass (no guessing needed a second try, unlike a couple of earlier milestones).
+- `provider-ai-gemini`: `generateContent` with the audio as inline data plus an explicit "transcribe this verbatim, output only the text" instruction — Gemini has no separate transcription endpoint, but audio-as-input to the same multimodal call works. Shares the `{url}|{base64,mimeType}` → inline-data resolution helper with `visionAnalyze` now (`toInlineDataPart`, generalized from what was `toInlineImagePart`).
+
+**Wired into both agents, each mirroring how it already handles its other media type:**
+- `agent-concierge`: a voice note with no `text` gets transcribed at the top of `handleMessage`, then flows through the *exact same* pipeline as typed text — including the free-text slot-selection fallback, so a spoken "I'll take the second one" resolves a booking exactly like a typed one would. Transcription failure returns a graceful "couldn't process that voice note, try typing" response rather than throwing (same silent-failure concern as the Milestone 8 calendar-booking fix — the channel-layer ack already happened by the time this runs).
+- `agent-cook`: same shape, but for spoken dietary-adjustment follow-ups ("can you make it vegetarian?") rather than bookings — a photo always still wins if a message somehow carries both.
+- **No channel-layer changes needed anywhere** — `channel-whatsapp`, `channel-telegram`, and the new `channel-sms` already normalize voice notes/voice messages/MMS audio into `NormalizedMedia` with `type: "audio"`, since that type has existed since Milestone 1. The whole feature came together at the `AIProvider` + agent layers only.
+
+**Verified locally (all green):** `pnpm lint`, `pnpm typecheck`, `pnpm boundaries` (0 violations, 466 modules/825 dependencies), `pnpm build`, `pnpm test` — 352/352 workspace-wide (355 with the 3 root integration tests), including 9 new voice-note-specific tests across the two agents (transcription → pipeline routing, spoken slot selection, graceful failure, photo-over-voice-note priority) plus new contract/request-shaping coverage in both AI provider packages.
+
+**Nothing deferred to the user for this item** — no live OpenAI/Gemini credentials were needed or used.
+
+**Next:** meal planning/grocery lists, multi-tenant `BusinessConfig`, and the Mother's Day Edition (Drive + RAG) — the remaining three Milestone 11 items.
+
+---
+
 ## 2026-08-13 — Milestone 11 (2/6): SMS via Twilio as a third `ChannelAdapter`
 
 **Status:** Two of six optional/future items done.

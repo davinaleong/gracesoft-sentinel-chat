@@ -61,6 +61,20 @@ describe("GeminiProvider — request shaping", () => {
     expect(imagePart.inlineData.data).toBe(Buffer.from([1, 2, 3]).toString("base64"));
   });
 
+  it("transcribeAudio sends the audio as inline data with a verbatim-transcription instruction", async () => {
+    const client = new FakeGeminiClient("Can I book a slot for tomorrow at 2pm?");
+    const provider = new GeminiProvider({ client });
+
+    const result = await provider.transcribeAudio({ audio: { base64: "ZmFrZQ==", mimeType: "audio/ogg" }, language: "en" });
+
+    const call = client.generateContentCalls[0]!;
+    const [textPart, audioPart] = call.contents[0]!.parts as [{ text: string }, { inlineData: { mimeType: string; data: string } }];
+    expect(textPart.text).toMatch(/transcribe this audio verbatim/i);
+    expect(textPart.text).toContain('"en"');
+    expect(audioPart.inlineData).toEqual({ mimeType: "audio/ogg", data: "ZmFrZQ==" });
+    expect(result.text).toBe("Can I book a slot for tomorrow at 2pm?");
+  });
+
   it("embed calls embedContent once per input and preserves order", async () => {
     const client = new FakeGeminiClient();
     const provider = new GeminiProvider({ client });

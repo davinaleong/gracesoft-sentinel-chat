@@ -5,6 +5,8 @@ import type {
   ChatCompleteResult,
   EmbedInput,
   EmbedResult,
+  TranscribeAudioInput,
+  TranscribeAudioResult,
   VisionAnalyzeInput,
   VisionAnalyzeResult,
 } from "@gracesoft-sentinel/core";
@@ -30,6 +32,10 @@ class EchoAiProvider implements AIProvider {
     // Deterministic, trivially-computed "vectors" — dimension doesn't need
     // to mean anything, only to be consistent across the batch.
     return { vectors: inputs.map((text) => [text.length, text.length * 2, text.length * 3]) };
+  }
+
+  async transcribeAudio(_input: TranscribeAudioInput): Promise<TranscribeAudioResult> {
+    return { text: "this is a fake transcription" };
   }
 }
 

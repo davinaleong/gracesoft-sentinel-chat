@@ -1,5 +1,11 @@
 # @gracesoft-sentinel/core
 
+## 0.3.0
+
+### Minor Changes
+
+- Add `transcribeAudio` to the `AIProvider` interface (+ `TranscribeAudioInput`/`TranscribeAudioResult` schemas), the capability behind Milestone 11's voice-note support. Every existing `AIProvider` implementation (OpenAI, Gemini) and test double had to add it; `runAIProviderContractTests` now exercises it too.
+
 ## 0.2.0
 
 ### Minor Changes

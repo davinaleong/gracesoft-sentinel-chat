@@ -12,6 +12,8 @@ import type {
   EmbedResult,
   GetAvailabilityInput,
   GetBusinessHoursInput,
+  TranscribeAudioInput,
+  TranscribeAudioResult,
   VisionAnalyzeInput,
   VisionAnalyzeResult,
 } from "@gracesoft-sentinel/core";
@@ -66,8 +68,12 @@ export const TEST_FAQ_BLUEPRINT: FaqGroundingBlueprint = {
 
 class FakeAiProvider implements AIProvider {
   public calls: ChatCompleteInput[] = [];
+  public transcribeAudioCalls: TranscribeAudioInput[] = [];
 
-  constructor(private readonly makeResult: (input: ChatCompleteInput) => ChatCompleteResult) {}
+  constructor(
+    private readonly makeResult: (input: ChatCompleteInput) => ChatCompleteResult,
+    private readonly makeTranscription?: (input: TranscribeAudioInput) => TranscribeAudioResult
+  ) {}
 
   async chatComplete(input: ChatCompleteInput): Promise<ChatCompleteResult> {
     this.calls.push(input);
@@ -81,6 +87,14 @@ class FakeAiProvider implements AIProvider {
   async embed(_input: EmbedInput): Promise<EmbedResult> {
     throw new Error("FakeAiProvider.embed is not implemented — not needed by these tests");
   }
+
+  async transcribeAudio(input: TranscribeAudioInput): Promise<TranscribeAudioResult> {
+    this.transcribeAudioCalls.push(input);
+    if (!this.makeTranscription) {
+      throw new Error("FakeAiProvider.transcribeAudio is not configured — pass makeTranscription to use it");
+    }
+    return this.makeTranscription(input);
+  }
 }
 
 export type { FakeAiProvider };
@@ -93,6 +107,14 @@ export function fakeAiProviderAnswering(answer: string, escalate = false): FakeA
 /** An AI provider fake driven by a callback, for asserting on the prompt it was sent. */
 export function fakeAiProviderWith(makeResult: (input: ChatCompleteInput) => ChatCompleteResult): FakeAiProvider {
   return new FakeAiProvider(makeResult);
+}
+
+/** An AI provider fake that transcribes any voice note to a fixed string, and otherwise answers FAQ questions normally. */
+export function fakeAiProviderWithTranscription(transcribedText: string, faqAnswer = "unused", escalate = false): FakeAiProvider {
+  return new FakeAiProvider(
+    () => ({ text: JSON.stringify({ answer: faqAnswer, escalate }) }),
+    () => ({ text: transcribedText })
+  );
 }
 
 class RecordingCalendarProvider implements CalendarProvider {

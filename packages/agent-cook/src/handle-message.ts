@@ -30,8 +30,24 @@ const AWAITING_PHOTO_REMINDER = "I'm waiting for a dish photo! Please send a foo
 
 const ANALYSIS_FAILED = "Sorry, I couldn't analyse that photo right now. Please try again in a moment.";
 
+const VOICE_NOTE_FAILED = "Sorry, I couldn't process that voice note. Please try typing instead, or send a dish photo.";
+
 function withContext(state: ConversationState, context: CookContext): ConversationState {
   return { ...state, context, updatedAt: new Date().toISOString() };
+}
+
+/**
+ * A voice note has no `text`, only `media` with an audio item — transcribed
+ * here so a spoken dietary adjustment ("can you make it vegetarian?") flows
+ * through the exact same text pipeline as a typed one. A photo always takes
+ * priority over a voice note if a message somehow carried both.
+ */
+async function resolveVoiceNoteText(message: NormalizedMessage, aiProvider: AIProvider): Promise<string> {
+  if (message.text) return message.text;
+  const audio = message.media?.find((m) => m.type === "audio" && m.url);
+  if (!audio?.url) return "";
+  const transcription = await aiProvider.transcribeAudio({ audio: { url: audio.url } });
+  return transcription.text;
 }
 
 async function handlePhoto(
@@ -93,7 +109,13 @@ export async function handleMessage(input: CookHandleMessageInput): Promise<Cook
     return handlePhoto(image.url, aiProvider, state);
   }
 
-  const text = message.text ?? "";
+  let text: string;
+  try {
+    text = await resolveVoiceNoteText(message, aiProvider);
+  } catch (err) {
+    console.error("[agent-cook] transcribeAudio failed:", err);
+    return { response: { text: VOICE_NOTE_FAILED }, state };
+  }
 
   if (context.lastRecipe && isDietaryAdjustmentRequest(text)) {
     return handleDietaryAdjustment(text, context.lastRecipe, aiProvider, state);

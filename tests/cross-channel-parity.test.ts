@@ -14,6 +14,8 @@ import type {
   EmbedResult,
   GetAvailabilityInput,
   GetBusinessHoursInput,
+  TranscribeAudioInput,
+  TranscribeAudioResult,
   VisionAnalyzeInput,
   VisionAnalyzeResult,
 } from "@gracesoft-sentinel/core";
@@ -54,6 +56,9 @@ class UnusedAiProvider implements AIProvider {
     throw new Error("not expected to be called for this scenario");
   }
   async embed(_input: EmbedInput): Promise<EmbedResult> {
+    throw new Error("not expected to be called for this scenario");
+  }
+  async transcribeAudio(_input: TranscribeAudioInput): Promise<TranscribeAudioResult> {
     throw new Error("not expected to be called for this scenario");
   }
 }
