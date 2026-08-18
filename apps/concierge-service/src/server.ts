@@ -1,13 +1,30 @@
 import express, { type Express } from "express";
+import { rateLimit } from "express-rate-limit";
 import { TelegramApiClient, TelegramChannelAdapter, createTelegramWebhookRouter } from "@gracesoft-sentinel/channel-telegram";
 import { WhatsAppApiClient, WhatsAppChannelAdapter, createWhatsAppWebhookRouter } from "@gracesoft-sentinel/channel-whatsapp";
 import type { NormalizedMessage, NormalizedResponse } from "@gracesoft-sentinel/core";
+import type { Logger } from "@gracesoft-sentinel/logging";
 import type { ConciergeServiceEnv } from "./env.js";
 
 export interface BuildServerParams {
   env: ConciergeServiceEnv;
   onMessage: (message: NormalizedMessage) => Promise<NormalizedResponse>;
   readinessCheck: () => Promise<boolean>;
+  appLogger: Logger;
+}
+
+/**
+ * Rate limits the webhook endpoint by source IP — a floor against abuse/
+ * flooding, not per-chatter fairness (legitimate traffic here comes from
+ * Meta's/Telegram's own delivery servers, not directly from end users).
+ */
+function webhookRateLimiter() {
+  return rateLimit({
+    windowMs: 60_000,
+    limit: 120,
+    standardHeaders: true,
+    legacyHeaders: false,
+  });
 }
 
 /**
@@ -16,7 +33,7 @@ export interface BuildServerParams {
  * Milestone 8's goal, not hardcoded to a fixed set of channels.
  */
 export function buildServer(params: BuildServerParams): Express {
-  const { env } = params;
+  const { env, appLogger } = params;
   const app = express();
 
   app.get("/health", (_req, res) => {
@@ -32,12 +49,14 @@ export function buildServer(params: BuildServerParams): Express {
     const apiClient = new WhatsAppApiClient({ accessToken: env.WHATSAPP_ACCESS_TOKEN!, phoneNumberId: env.WHATSAPP_PHONE_NUMBER_ID! });
     const adapter = new WhatsAppChannelAdapter({ resolveMedia: (mediaId) => apiClient.downloadMediaAsDataUri(mediaId) });
     app.use(
+      webhookRateLimiter(),
       createWhatsAppWebhookRouter({
         verifyToken: env.WHATSAPP_WEBHOOK_VERIFY_TOKEN!,
         appSecret: env.WHATSAPP_APP_SECRET!,
         adapter,
         apiClient,
         onMessage: params.onMessage,
+        onError: (err) => appLogger.error({ err }, "WhatsApp webhook processing failed"),
       })
     );
   }
@@ -46,11 +65,13 @@ export function buildServer(params: BuildServerParams): Express {
     const apiClient = new TelegramApiClient({ botToken: env.TELEGRAM_BOT_TOKEN! });
     const adapter = new TelegramChannelAdapter({ resolveMedia: (fileId, mimeType) => apiClient.downloadFileAsDataUri(fileId, mimeType) });
     app.use(
+      webhookRateLimiter(),
       createTelegramWebhookRouter({
         secretToken: env.TELEGRAM_WEBHOOK_SECRET!,
         adapter,
         apiClient,
         onMessage: params.onMessage,
+        onError: (err) => appLogger.error({ err }, "Telegram webhook processing failed"),
       })
     );
   }

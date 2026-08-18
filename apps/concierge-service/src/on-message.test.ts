@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest";
 import type { BusinessConfig, NormalizedMessage } from "@gracesoft-sentinel/core";
 import type { FaqGroundingBlueprint } from "@gracesoft-sentinel/agent-concierge";
 import { createOnMessageHandler } from "./on-message.js";
-import { FakeAiProvider, FakeCalendarProvider, FakeConversationLogger, FakeSessionStore } from "./test-support.js";
+import { FakeAiProvider, FakeCalendarProvider, FakeConversationLogger, FakeSessionStore, createSilentTestLogger } from "./test-support.js";
 
 const BUSINESS_CONFIG: BusinessConfig = {
   businessId: "test-biz",
@@ -52,7 +52,8 @@ describe("createOnMessageHandler", () => {
       calendarProvider: new FakeCalendarProvider(),
       aiProvider: new FakeAiProvider(),
       sessionStore,
-      logger: new FakeConversationLogger(),
+      conversationLogger: new FakeConversationLogger(),
+      appLogger: createSilentTestLogger(),
     });
 
     const response = await onMessage(makeMessage({ text: "book something" }));
@@ -71,7 +72,8 @@ describe("createOnMessageHandler", () => {
       calendarProvider,
       aiProvider: new FakeAiProvider(),
       sessionStore,
-      logger: new FakeConversationLogger(),
+      conversationLogger: new FakeConversationLogger(),
+      appLogger: createSilentTestLogger(),
     });
 
     const first = await onMessage(makeMessage({ text: "book something" }));
@@ -89,7 +91,8 @@ describe("createOnMessageHandler", () => {
       calendarProvider: new FakeCalendarProvider(),
       aiProvider: new FakeAiProvider(),
       sessionStore: new FakeSessionStore(),
-      logger,
+      conversationLogger: logger,
+      appLogger: createSilentTestLogger(),
     });
 
     await onMessage(makeMessage({ text: "What are your hours?" }));
@@ -107,12 +110,30 @@ describe("createOnMessageHandler", () => {
       calendarProvider: new FakeCalendarProvider(),
       aiProvider: new FakeAiProvider(),
       sessionStore: new FakeSessionStore(),
-      logger,
+      conversationLogger: logger,
+      appLogger: createSilentTestLogger(),
     });
 
     await onMessage(makeMessage({ text: "book for 4 May at 11am" }));
 
     expect(logger.bookings).toHaveLength(1);
+  });
+
+  it("redacts PII (e.g. a phone number) out of message text before logging it", async () => {
+    const logger = new FakeConversationLogger();
+    const onMessage = createOnMessageHandler({
+      businessConfig: BUSINESS_CONFIG,
+      faqBlueprint: FAQ_BLUEPRINT,
+      calendarProvider: new FakeCalendarProvider(),
+      aiProvider: new FakeAiProvider(),
+      sessionStore: new FakeSessionStore(),
+      conversationLogger: logger,
+      appLogger: createSilentTestLogger(),
+    });
+
+    await onMessage(makeMessage({ text: "Call me back at 91234567 please" }));
+
+    expect(logger.messages[0]!.text).toBe("Call me back at [redacted-phone] please");
   });
 
   it("derives distinct sessions for different channels even with the same senderId string", async () => {
@@ -123,7 +144,8 @@ describe("createOnMessageHandler", () => {
       calendarProvider: new FakeCalendarProvider(),
       aiProvider: new FakeAiProvider(),
       sessionStore,
-      logger: new FakeConversationLogger(),
+      conversationLogger: new FakeConversationLogger(),
+      appLogger: createSilentTestLogger(),
     });
 
     await onMessage(makeMessage({ channel: "whatsapp", senderId: "999", text: "book something" }));

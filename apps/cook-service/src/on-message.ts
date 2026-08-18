@@ -1,5 +1,6 @@
 import { handleMessage } from "@gracesoft-sentinel/agent-cook";
 import type { AIProvider, ConversationState, NormalizedMessage, NormalizedResponse, SessionStore } from "@gracesoft-sentinel/core";
+import { redactPii, type Logger } from "@gracesoft-sentinel/logging";
 import type { ConversationLogger } from "@gracesoft-sentinel/logging-postgres";
 
 const DEFAULT_SESSION_TTL_SECONDS = 60 * 60; // 1h — Cook's flow is single-photo-in, single-recipe-out; short-lived by design
@@ -7,7 +8,8 @@ const DEFAULT_SESSION_TTL_SECONDS = 60 * 60; // 1h — Cook's flow is single-pho
 export interface OnMessageDeps {
   aiProvider: AIProvider;
   sessionStore: SessionStore;
-  logger: ConversationLogger;
+  conversationLogger: ConversationLogger;
+  appLogger: Logger;
   sessionTtlSeconds?: number;
 }
 
@@ -20,11 +22,15 @@ function freshState(sessionId: string, message: NormalizedMessage): Conversation
   return { sessionId, channel: message.channel, userId: message.senderId, agent: "cook", createdAt: now, updatedAt: now, context: {} };
 }
 
-async function logSafely(logger: ConversationLogger, entry: Parameters<ConversationLogger["logMessage"]>[0]): Promise<void> {
+async function logSafely(
+  conversationLogger: ConversationLogger,
+  appLogger: Logger,
+  entry: Parameters<ConversationLogger["logMessage"]>[0]
+): Promise<void> {
   try {
-    await logger.logMessage(entry);
+    await conversationLogger.logMessage({ ...entry, text: entry.text ? redactPii(entry.text) : entry.text });
   } catch (err) {
-    console.error("[cook-service] failed to log message:", err);
+    appLogger.error({ err, sessionId: entry.sessionId }, "failed to log conversation message");
   }
 }
 
@@ -32,9 +38,10 @@ async function logSafely(logger: ConversationLogger, entry: Parameters<Conversat
 export function createOnMessageHandler(deps: OnMessageDeps): (message: NormalizedMessage) => Promise<NormalizedResponse> {
   return async (message: NormalizedMessage): Promise<NormalizedResponse> => {
     const sessionId = sessionIdFor(message);
+    const log = deps.appLogger.child({ sessionId });
     const state = (await deps.sessionStore.get(sessionId)) ?? freshState(sessionId, message);
 
-    await logSafely(deps.logger, {
+    await logSafely(deps.conversationLogger, log, {
       sessionId,
       channel: message.channel,
       agent: "cook",
@@ -47,7 +54,7 @@ export function createOnMessageHandler(deps: OnMessageDeps): (message: Normalize
 
     await deps.sessionStore.set(result.state, deps.sessionTtlSeconds ?? DEFAULT_SESSION_TTL_SECONDS);
 
-    await logSafely(deps.logger, {
+    await logSafely(deps.conversationLogger, log, {
       sessionId,
       channel: message.channel,
       agent: "cook",
@@ -56,6 +63,7 @@ export function createOnMessageHandler(deps: OnMessageDeps): (message: Normalize
       occurredAt: new Date().toISOString(),
     });
 
+    log.info("handled message");
     return result.response;
   };
 }

@@ -3,6 +3,7 @@ import type { AddressInfo } from "node:net";
 import { afterEach, describe, expect, it } from "vitest";
 import type { ConciergeServiceEnv } from "./env.js";
 import { buildServer } from "./server.js";
+import { createSilentTestLogger } from "./test-support.js";
 
 const BASE_ENV: ConciergeServiceEnv = {
   PORT: 0,
@@ -26,7 +27,12 @@ afterEach(() => {
 });
 
 async function listen(env: ConciergeServiceEnv): Promise<string> {
-  const app = buildServer({ env, onMessage: async () => ({ text: "unused" }), readinessCheck: async () => true });
+  const app = buildServer({
+    env,
+    onMessage: async () => ({ text: "unused" }),
+    readinessCheck: async () => true,
+    appLogger: createSilentTestLogger(),
+  });
   server = createServer(app);
   await new Promise<void>((resolve) => server!.listen(0, resolve));
   const { port } = server.address() as AddressInfo;
@@ -42,7 +48,12 @@ describe("buildServer — health/readiness", () => {
   });
 
   it("GET /ready returns 200 when the readiness check passes", async () => {
-    const app = buildServer({ env: BASE_ENV, onMessage: async () => ({ text: "unused" }), readinessCheck: async () => true });
+    const app = buildServer({
+      env: BASE_ENV,
+      onMessage: async () => ({ text: "unused" }),
+      readinessCheck: async () => true,
+      appLogger: createSilentTestLogger(),
+    });
     server = createServer(app);
     await new Promise<void>((resolve) => server!.listen(0, resolve));
     const { port } = server.address() as AddressInfo;
@@ -57,6 +68,7 @@ describe("buildServer — health/readiness", () => {
       readinessCheck: async () => {
         throw new Error("redis unreachable");
       },
+      appLogger: createSilentTestLogger(),
     });
     server = createServer(app);
     await new Promise<void>((resolve) => server!.listen(0, resolve));
@@ -80,5 +92,17 @@ describe("buildServer — conditional channel mounting", () => {
     // Telegram's router only registers POST /webhook, not GET — so a GET falls through to 404 either way,
     // proving WhatsApp's GET handshake route specifically was never mounted.
     expect(res.status).toBe(404);
+  });
+});
+
+describe("buildServer — rate limiting", () => {
+  it("rate limits the webhook endpoint after too many requests from the same source", async () => {
+    const baseUrl = await listen(BASE_ENV);
+    let lastStatus = 200;
+    for (let i = 0; i < 121; i++) {
+      const res = await fetch(`${baseUrl}/webhook`, { method: "POST", headers: { "content-type": "application/json" }, body: "{}" });
+      lastStatus = res.status;
+    }
+    expect(lastStatus).toBe(429);
   });
 });

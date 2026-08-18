@@ -2,6 +2,7 @@ import { OpenAIProvider } from "@gracesoft-sentinel/provider-ai-openai";
 import { GoogleCalendarProvider, createGoogleCalendarClient } from "@gracesoft-sentinel/provider-calendar-google";
 import { RedisSessionStore, createRedisClient } from "@gracesoft-sentinel/provider-session-redis";
 import { PostgresConversationLogger, createPgClient } from "@gracesoft-sentinel/logging-postgres";
+import { createLogger, type Logger } from "@gracesoft-sentinel/logging";
 import type { NormalizedMessage, NormalizedResponse } from "@gracesoft-sentinel/core";
 import { loadBusinessConfig, loadFaqBlueprint } from "./business-config-loader.js";
 import { createOnMessageHandler } from "./on-message.js";
@@ -10,10 +11,13 @@ import type { ConciergeServiceEnv } from "./env.js";
 export interface Composition {
   onMessage: (message: NormalizedMessage) => Promise<NormalizedResponse>;
   readinessCheck: () => Promise<boolean>;
+  appLogger: Logger;
 }
 
 /** The composition root: wires agent-concierge to every provider and persistence layer, purely from env. */
 export function buildComposition(env: ConciergeServiceEnv): Composition {
+  const appLogger = createLogger("concierge-service");
+
   const businessConfig = loadBusinessConfig(env.BUSINESS_CONFIG_PATH);
   const faqBlueprint = loadFaqBlueprint(env.BUSINESS_CONFIG_PATH, businessConfig);
 
@@ -33,9 +37,17 @@ export function buildComposition(env: ConciergeServiceEnv): Composition {
   const sessionStore = new RedisSessionStore({ client: redisClient });
 
   const pgClient = createPgClient(env.DATABASE_URL);
-  const logger = new PostgresConversationLogger({ client: pgClient });
+  const conversationLogger = new PostgresConversationLogger({ client: pgClient });
 
-  const onMessage = createOnMessageHandler({ businessConfig, faqBlueprint, calendarProvider, aiProvider, sessionStore, logger });
+  const onMessage = createOnMessageHandler({
+    businessConfig,
+    faqBlueprint,
+    calendarProvider,
+    aiProvider,
+    sessionStore,
+    conversationLogger,
+    appLogger,
+  });
 
   const readinessCheck = async (): Promise<boolean> => {
     await redisClient.get("__healthcheck__");
@@ -43,5 +55,5 @@ export function buildComposition(env: ConciergeServiceEnv): Composition {
     return true;
   };
 
-  return { onMessage, readinessCheck };
+  return { onMessage, readinessCheck, appLogger };
 }

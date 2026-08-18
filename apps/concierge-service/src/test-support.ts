@@ -17,6 +17,12 @@ import type {
   VisionAnalyzeResult,
 } from "@gracesoft-sentinel/core";
 import type { BookingLogEntry, ConversationLogger, ConversationMessageLogEntry } from "@gracesoft-sentinel/logging-postgres";
+import { createLogger, type Logger } from "@gracesoft-sentinel/logging";
+
+/** A working structured logger that writes nowhere — keeps test output clean without stubbing the whole interface. */
+export function createSilentTestLogger(): Logger {
+  return createLogger("test", { write: () => {} });
+}
 
 export class FakeCalendarProvider implements CalendarProvider {
   public createBookingCalls: CreateBookingInput[] = [];

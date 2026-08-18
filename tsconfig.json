@@ -12,6 +12,7 @@
     { "path": "packages/provider-session-redis" },
     { "path": "packages/logging-postgres" },
     { "path": "packages/legal-concierge" },
-    { "path": "packages/legal-cook" }
+    { "path": "packages/legal-cook" },
+    { "path": "packages/logging" }
   ]
 }

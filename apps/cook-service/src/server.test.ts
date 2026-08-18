@@ -3,6 +3,7 @@ import type { AddressInfo } from "node:net";
 import { afterEach, describe, expect, it } from "vitest";
 import type { CookServiceEnv } from "./env.js";
 import { buildServer } from "./server.js";
+import { createSilentTestLogger } from "./test-support.js";
 
 const BASE_ENV: CookServiceEnv = {
   PORT: 0,
@@ -23,7 +24,12 @@ afterEach(() => {
 });
 
 async function listen(env: CookServiceEnv): Promise<string> {
-  const app = buildServer({ env, onMessage: async () => ({ text: "unused" }), readinessCheck: async () => true });
+  const app = buildServer({
+    env,
+    onMessage: async () => ({ text: "unused" }),
+    readinessCheck: async () => true,
+    appLogger: createSilentTestLogger(),
+  });
   server = createServer(app);
   await new Promise<void>((resolve) => server!.listen(0, resolve));
   const { port } = server!.address() as AddressInfo;
@@ -45,6 +51,7 @@ describe("buildServer — health/readiness", () => {
       readinessCheck: async () => {
         throw new Error("postgres unreachable");
       },
+      appLogger: createSilentTestLogger(),
     });
     server = createServer(app);
     await new Promise<void>((resolve) => server!.listen(0, resolve));
@@ -59,5 +66,17 @@ describe("buildServer — conditional channel mounting", () => {
     const baseUrl = await listen(BASE_ENV);
     const res = await fetch(`${baseUrl}/webhook`, { method: "POST", headers: { "content-type": "application/json" }, body: "{}" });
     expect(res.status).toBe(403);
+  });
+});
+
+describe("buildServer — rate limiting", () => {
+  it("rate limits the webhook endpoint after too many requests from the same source", async () => {
+    const baseUrl = await listen(BASE_ENV);
+    let lastStatus = 200;
+    for (let i = 0; i < 121; i++) {
+      const res = await fetch(`${baseUrl}/webhook`, { method: "POST", headers: { "content-type": "application/json" }, body: "{}" });
+      lastStatus = res.status;
+    }
+    expect(lastStatus).toBe(429);
   });
 });

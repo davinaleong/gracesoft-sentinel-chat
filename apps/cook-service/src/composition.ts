@@ -1,6 +1,7 @@
 import { OpenAIProvider } from "@gracesoft-sentinel/provider-ai-openai";
 import { RedisSessionStore, createRedisClient } from "@gracesoft-sentinel/provider-session-redis";
 import { PostgresConversationLogger, createPgClient } from "@gracesoft-sentinel/logging-postgres";
+import { createLogger, type Logger } from "@gracesoft-sentinel/logging";
 import type { NormalizedMessage, NormalizedResponse } from "@gracesoft-sentinel/core";
 import { createOnMessageHandler } from "./on-message.js";
 import type { CookServiceEnv } from "./env.js";
@@ -8,10 +9,13 @@ import type { CookServiceEnv } from "./env.js";
 export interface Composition {
   onMessage: (message: NormalizedMessage) => Promise<NormalizedResponse>;
   readinessCheck: () => Promise<boolean>;
+  appLogger: Logger;
 }
 
 /** The composition root: wires agent-cook to every provider and persistence layer, purely from env. */
 export function buildComposition(env: CookServiceEnv): Composition {
+  const appLogger = createLogger("cook-service");
+
   const aiProvider = new OpenAIProvider({
     apiKey: env.OPENAI_API_KEY,
     model: env.OPENAI_MODEL,
@@ -22,9 +26,9 @@ export function buildComposition(env: CookServiceEnv): Composition {
   const sessionStore = new RedisSessionStore({ client: redisClient, keyPrefix: "gracesoft-sentinel:cook-session:" });
 
   const pgClient = createPgClient(env.DATABASE_URL);
-  const logger = new PostgresConversationLogger({ client: pgClient });
+  const conversationLogger = new PostgresConversationLogger({ client: pgClient });
 
-  const onMessage = createOnMessageHandler({ aiProvider, sessionStore, logger });
+  const onMessage = createOnMessageHandler({ aiProvider, sessionStore, conversationLogger, appLogger });
 
   const readinessCheck = async (): Promise<boolean> => {
     await redisClient.get("__healthcheck__");
@@ -32,5 +36,5 @@ export function buildComposition(env: CookServiceEnv): Composition {
     return true;
   };
 
-  return { onMessage, readinessCheck };
+  return { onMessage, readinessCheck, appLogger };
 }

@@ -245,13 +245,13 @@ Carry forward the reliability work already validated in the original plan, now a
 * Deployment (Docker, chosen host)
 
 ### Checklist
-* [ ] Add rate limiting middleware at service layer
-* [ ] Add prompt-injection test cases + mitigations
-* [ ] Add PII redaction to logging pipeline
-* [ ] Add structured logging (shared logger package, not duplicated)
-* [ ] Add health check / readiness endpoints
-* [ ] Dockerise both services
-* [ ] Deploy + smoke test in staging
+* [x] Add rate limiting middleware at service layer
+* [x] Add prompt-injection test cases + mitigations
+* [x] Add PII redaction to logging pipeline
+* [x] Add structured logging (shared logger package, not duplicated)
+* [x] Add health check / readiness endpoints (already done in Milestone 8)
+* [x] Dockerise both services (already done in Milestone 8, `legal-site` also has one from Milestone 9)
+* [ ] Deploy + smoke test in staging — blocked: needs real hosting + OpenAI/Google/WhatsApp/Telegram credentials this environment doesn't have
 
 ---
 

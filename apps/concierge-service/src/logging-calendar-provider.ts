@@ -1,4 +1,5 @@
 import type { AvailabilitySlot, Booking, BusinessHours, CalendarProvider, CreateBookingInput, GetAvailabilityInput, GetBusinessHoursInput } from "@gracesoft-sentinel/core";
+import type { Logger } from "@gracesoft-sentinel/logging";
 import type { ConversationLogger } from "@gracesoft-sentinel/logging-postgres";
 
 /**
@@ -8,7 +9,12 @@ import type { ConversationLogger } from "@gracesoft-sentinel/logging-postgres";
  * records need the session id, which only the composition layer (this
  * service) has in scope.
  */
-export function withBookingLogging(inner: CalendarProvider, logger: ConversationLogger, sessionId: string): CalendarProvider {
+export function withBookingLogging(
+  inner: CalendarProvider,
+  conversationLogger: ConversationLogger,
+  sessionId: string,
+  appLogger: Logger
+): CalendarProvider {
   return {
     getAvailability(input: GetAvailabilityInput): Promise<AvailabilitySlot[]> {
       return inner.getAvailability(input);
@@ -16,7 +22,7 @@ export function withBookingLogging(inner: CalendarProvider, logger: Conversation
     async createBooking(input: CreateBookingInput): Promise<Booking> {
       const booking = await inner.createBooking(input);
       try {
-        await logger.logBooking({
+        await conversationLogger.logBooking({
           sessionId,
           bookingId: booking.id,
           calendarId: input.calendarId,
@@ -25,7 +31,7 @@ export function withBookingLogging(inner: CalendarProvider, logger: Conversation
           createdAt: new Date().toISOString(),
         });
       } catch (err) {
-        console.error("[concierge-service] failed to log booking:", err);
+        appLogger.error({ err, sessionId, bookingId: booking.id }, "failed to log booking");
       }
       return booking;
     },
