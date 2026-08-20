@@ -96,6 +96,19 @@ describe("buildServer — conditional channel mounting", () => {
 });
 
 describe("buildServer — rate limiting", () => {
+  it("doesn't crash on a request carrying X-Forwarded-For (regression: ERR_ERL_UNEXPECTED_X_FORWARDED_FOR without app.set('trust proxy', ...))", async () => {
+    const baseUrl = await listen(BASE_ENV);
+    const res = await fetch(`${baseUrl}/webhook`, {
+      method: "POST",
+      headers: { "content-type": "application/json", "x-forwarded-for": "203.0.113.1" },
+      body: "{}",
+    });
+    // 403 (missing Telegram secret header) proves the request was actually
+    // handled by the rate limiter + router, not a 500 from an unhandled
+    // ValidationError thrown by express-rate-limit's proxy-trust check.
+    expect(res.status).toBe(403);
+  });
+
   it("rate limits the webhook endpoint after too many requests from the same source", async () => {
     const baseUrl = await listen(BASE_ENV);
     let lastStatus = 200;

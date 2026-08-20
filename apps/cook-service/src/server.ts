@@ -27,6 +27,11 @@ function webhookRateLimiter() {
 export function buildServer(params: BuildServerParams): Express {
   const { env, appLogger } = params;
   const app = express();
+  // Exactly one hop: the reverse proxy/tunnel this service always sits
+  // behind (ngrok locally, a load balancer in production) — not `true`,
+  // which would trust the entire client-supplied X-Forwarded-For chain
+  // and let a client spoof its own rate-limit identity.
+  app.set("trust proxy", 1);
 
   app.get("/health", (_req, res) => {
     res.status(200).json({ status: "ok" });
