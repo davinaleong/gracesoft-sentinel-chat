@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import type { BusinessHours } from "@gracesoft-sentinel/core";
-import { runCalendarProviderContractTests } from "@gracesoft-sentinel/core";
+import { runCalendarProviderContractTests } from "@gracesoft-sentinel/core/testing";
 import { createGoogleCalendarProviderFromEnv, GoogleCalendarProvider } from "./google-calendar-provider.js";
 import { FakeGoogleCalendarClient } from "./test-support.js";
 

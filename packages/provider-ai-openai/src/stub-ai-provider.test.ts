@@ -1,4 +1,4 @@
-import { runAIProviderContractTests } from "@gracesoft-sentinel/core";
+import { runAIProviderContractTests } from "@gracesoft-sentinel/core/testing";
 import type {
   AIProvider,
   ChatCompleteInput,

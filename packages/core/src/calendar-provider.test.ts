@@ -8,7 +8,8 @@ import type {
   GetAvailabilityInput,
   GetBusinessHoursInput,
 } from "./calendar-provider.js";
-import { BusinessHoursSchema, runCalendarProviderContractTests } from "./calendar-provider.js";
+import { BusinessHoursSchema } from "./calendar-provider.js";
+import { runCalendarProviderContractTests } from "./calendar-provider-contract.js";
 
 /**
  * Trivial in-memory provider, used only to prove the contract suite itself

@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { runChannelAdapterContractTests } from "@gracesoft-sentinel/core";
+import { runChannelAdapterContractTests } from "@gracesoft-sentinel/core/testing";
 import { TelegramChannelAdapter } from "./telegram-adapter.js";
 import type { TelegramUpdate } from "./telegram-types.js";
 

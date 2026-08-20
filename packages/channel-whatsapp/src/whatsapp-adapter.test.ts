@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { runChannelAdapterContractTests } from "@gracesoft-sentinel/core";
+import { runChannelAdapterContractTests } from "@gracesoft-sentinel/core/testing";
 import { WhatsAppChannelAdapter } from "./whatsapp-adapter.js";
 import type { WhatsAppWebhookPayload } from "./whatsapp-types.js";
 

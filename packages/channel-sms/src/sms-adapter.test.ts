@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { runChannelAdapterContractTests } from "@gracesoft-sentinel/core";
+import { runChannelAdapterContractTests } from "@gracesoft-sentinel/core/testing";
 import { SmsChannelAdapter } from "./sms-adapter.js";
 import type { TwilioInboundWebhookBody } from "./sms-types.js";
 

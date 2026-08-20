@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { runAIProviderContractTests } from "@gracesoft-sentinel/core";
+import { runAIProviderContractTests } from "@gracesoft-sentinel/core/testing";
 import { createGeminiProviderFromEnv, GeminiProvider } from "./gemini-provider.js";
 import { FakeGeminiClient } from "./test-support.js";
 

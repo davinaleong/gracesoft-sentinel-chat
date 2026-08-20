@@ -1,0 +1,7 @@
+**/node_modules
+**/dist
+**/*.tsbuildinfo
+.git
+.changeset
+_internal-docs/assets
+docs

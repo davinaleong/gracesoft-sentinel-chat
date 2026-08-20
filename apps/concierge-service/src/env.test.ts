@@ -24,6 +24,17 @@ describe("loadEnv", () => {
     expect(env.PORT).toBe(3000);
   });
 
+  it("respects an explicit WHATSAPP_ENABLED=false (regression: z.coerce.boolean() would treat the string \"false\" as true)", () => {
+    const env = loadEnv({
+      ...BASE_ENV,
+      WHATSAPP_ENABLED: "false",
+      TELEGRAM_ENABLED: "true",
+      TELEGRAM_BOT_TOKEN: "t",
+      TELEGRAM_WEBHOOK_SECRET: "s",
+    } as unknown as NodeJS.ProcessEnv);
+    expect(env.WHATSAPP_ENABLED).toBe(false);
+  });
+
   it("throws when no channel is enabled", () => {
     expect(() => loadEnv({ ...BASE_ENV } as unknown as NodeJS.ProcessEnv)).toThrow(/WHATSAPP_ENABLED or TELEGRAM_ENABLED/);
   });

@@ -1,6 +1,19 @@
 import { z } from "zod";
 
 /**
+ * `z.coerce.boolean()` is just `Boolean(value)` under the hood — for a
+ * string env var, that makes the literal string "false" coerce to `true`
+ * (any non-empty string is truthy), silently ignoring an explicit
+ * WHATSAPP_ENABLED=false. Parse the two expected string values explicitly
+ * instead, so a real "false" is actually respected and anything else is a
+ * clear validation error rather than a silent yes.
+ */
+const booleanFromEnvString = z
+  .enum(["true", "false"])
+  .default("false")
+  .transform((value) => value === "true");
+
+/**
  * Env validation via Zod, fails fast at startup with a clear error rather
  * than surfacing a confusing failure deep in a request handler later.
  */
@@ -29,13 +42,13 @@ export const ConciergeServiceEnvSchema = z
      */
     BUSINESS_CONFIGS_DIR: z.string().min(1).optional(),
 
-    WHATSAPP_ENABLED: z.coerce.boolean().default(false),
+    WHATSAPP_ENABLED: booleanFromEnvString,
     WHATSAPP_PHONE_NUMBER_ID: z.string().optional(),
     WHATSAPP_ACCESS_TOKEN: z.string().optional(),
     WHATSAPP_APP_SECRET: z.string().optional(),
     WHATSAPP_WEBHOOK_VERIFY_TOKEN: z.string().optional(),
 
-    TELEGRAM_ENABLED: z.coerce.boolean().default(false),
+    TELEGRAM_ENABLED: booleanFromEnvString,
     TELEGRAM_BOT_TOKEN: z.string().optional(),
     TELEGRAM_WEBHOOK_SECRET: z.string().optional(),
   })

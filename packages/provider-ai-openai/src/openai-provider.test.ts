@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { runAIProviderContractTests } from "@gracesoft-sentinel/core";
+import { runAIProviderContractTests } from "@gracesoft-sentinel/core/testing";
 import { createOpenAIProviderFromEnv, OpenAIProvider, type OpenAIProviderConfig } from "./openai-provider.js";
 
 /**

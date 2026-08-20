@@ -1,6 +1,6 @@
 import type { ConversationState } from "./conversation-state.js";
 import type { SessionStore } from "./session-store.js";
-import { runSessionStoreContractTests } from "./session-store.js";
+import { runSessionStoreContractTests } from "./session-store-contract.js";
 
 /**
  * Trivial in-memory store, used only to prove the contract suite itself is

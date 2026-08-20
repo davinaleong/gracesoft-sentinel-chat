@@ -1,5 +1,5 @@
 import type { AIProvider } from "./ai-provider.js";
-import { runAIProviderContractTests } from "./ai-provider.js";
+import { runAIProviderContractTests } from "./ai-provider-contract.js";
 
 /**
  * Trivial fake provider, used only to prove the contract suite itself is

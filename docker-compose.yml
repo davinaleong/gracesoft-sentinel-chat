@@ -47,7 +47,7 @@ services:
       postgres:
         condition: service_healthy
     volumes:
-      - ./_internal-docs/data:/app/_internal-docs/data:ro
+      - ./_internal-docs/data:/repo/_internal-docs/data:ro
 
   cook-service:
     build:

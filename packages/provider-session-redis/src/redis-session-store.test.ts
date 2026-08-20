@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { runSessionStoreContractTests } from "@gracesoft-sentinel/core";
+import { runSessionStoreContractTests } from "@gracesoft-sentinel/core/testing";
 import type { ConversationState } from "@gracesoft-sentinel/core";
 import { RedisSessionStore, createRedisSessionStoreFromEnv } from "./redis-session-store.js";
 import { FakeRedisClient } from "./test-support.js";

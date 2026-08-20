@@ -1,5 +1,5 @@
 import type { ChannelAdapter } from "./channel-adapter.js";
-import { runChannelAdapterContractTests } from "./channel-adapter.js";
+import { runChannelAdapterContractTests } from "./channel-adapter-contract.js";
 
 /**
  * Trivial in-memory adapter, used only to prove the contract suite itself
