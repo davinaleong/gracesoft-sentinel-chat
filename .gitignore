@@ -70,6 +70,11 @@ web_modules/
 .env.*
 !.env.example
 
+# Real per-business config (Google Calendar id, etc.) — the "example" file
+# stays a template with placeholder values; the real one is local-only.
+_internal-docs/data/business-config.json
+_internal-docs/data/business-configs/
+
 # parcel-bundler cache (https://parceljs.org/)
 .cache
 .parcel-cache

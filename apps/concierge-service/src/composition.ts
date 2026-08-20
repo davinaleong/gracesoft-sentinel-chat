@@ -1,6 +1,6 @@
 import { OpenAIProvider } from "@gracesoft-sentinel/provider-ai-openai";
 import { GoogleCalendarProvider, createGoogleCalendarClient, type GoogleCalendarClient } from "@gracesoft-sentinel/provider-calendar-google";
-import { RedisSessionStore, createRedisClient } from "@gracesoft-sentinel/provider-session-redis";
+import { RedisRateLimiter, RedisSessionStore, createRedisClient } from "@gracesoft-sentinel/provider-session-redis";
 import { PostgresConversationLogger, createPgClient } from "@gracesoft-sentinel/logging-postgres";
 import { createLogger, type Logger } from "@gracesoft-sentinel/logging";
 import type { NormalizedMessage, NormalizedResponse } from "@gracesoft-sentinel/core";
@@ -65,6 +65,9 @@ export function buildComposition(env: ConciergeServiceEnv): Composition {
 
   const redisClient = createRedisClient(env.REDIS_URL);
   const sessionStore = new RedisSessionStore({ client: redisClient });
+  // 20 messages/minute per chatter — generous for a real conversation
+  // (including a multi-turn booking flow), tight enough to blunt a flood.
+  const rateLimiter = new RedisRateLimiter({ client: redisClient, limit: 20, windowSeconds: 60 });
 
   const pgClient = createPgClient(env.DATABASE_URL);
   const conversationLogger = new PostgresConversationLogger({ client: pgClient });
@@ -75,6 +78,7 @@ export function buildComposition(env: ConciergeServiceEnv): Composition {
     sessionStore,
     conversationLogger,
     appLogger,
+    rateLimiter,
   });
 
   const readinessCheck = async (): Promise<boolean> => {

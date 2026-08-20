@@ -1,4 +1,5 @@
-import type { AvailabilitySlot } from "@gracesoft-sentinel/core";
+import type { AvailabilitySlot, ConversationState } from "@gracesoft-sentinel/core";
+import type { Dayjs } from "dayjs";
 import { inBusinessTz } from "./time.js";
 
 export interface BookingCandidate {
@@ -7,11 +8,58 @@ export interface BookingCandidate {
   end: string;
 }
 
+export interface BookingsTodayCounter {
+  /** "YYYY-MM-DD" in the business's timezone. */
+  date: string;
+  count: number;
+}
+
 /** Shape agent-concierge owns within `ConversationState.context`. */
 export interface ConciergeContext {
   bookingCandidates?: BookingCandidate[];
   lastEscalatedMessage?: string;
+  aiDisclosed?: boolean;
+  /** Most recent appointment id this chatter (session) has booked — an opportunistic convenience, not an auth guarantee. */
+  lastAppointmentId?: string;
+  bookingsToday?: BookingsTodayCounter;
+  /** True while awaiting the chatter's reply to "what's your appointment id?". */
+  awaitingAppointmentId?: boolean;
+  /** Set when offering `lastAppointmentId` as a guess and awaiting yes/no confirmation. */
+  pendingRescheduleConfirmationId?: string;
+  /**
+   * The provider's own booking id (not the human appointment id) — set
+   * alongside `bookingCandidates` during a reschedule's slot-offer phase so
+   * `handlePendingSelection` knows to call `updateBooking` instead of
+   * `createBooking` on selection.
+   */
+  reschedulingBookingId?: string;
   [key: string]: unknown;
+}
+
+/**
+ * Merges `patch` onto the existing context rather than replacing it —
+ * session-lifetime fields (`aiDisclosed`, `lastAppointmentId`,
+ * `bookingsToday`, ...) must survive turns whose own concern is unrelated
+ * to them. A field is only actually cleared when a patch explicitly sets it
+ * to `undefined` (e.g. `{ bookingCandidates: undefined }` once a booking
+ * flow concludes) — the equivalent of `context.bookingCandidates` never
+ * having been set, everywhere this codebase checks for it.
+ */
+export function withContext(state: ConversationState, patch: Partial<ConciergeContext>): ConversationState {
+  const context: ConciergeContext = { ...(state.context as ConciergeContext), ...patch };
+  return { ...state, context, updatedAt: new Date().toISOString() };
+}
+
+export const DAILY_BOOKING_LIMIT = 3;
+
+export function bookingsMadeToday(context: ConciergeContext, today: Dayjs): number {
+  const counter = context.bookingsToday;
+  if (!counter || counter.date !== today.format("YYYY-MM-DD")) return 0;
+  return counter.count;
+}
+
+export function incrementBookingsToday(context: ConciergeContext, today: Dayjs): BookingsTodayCounter {
+  return { date: today.format("YYYY-MM-DD"), count: bookingsMadeToday(context, today) + 1 };
 }
 
 export function toBookingCandidates(slots: AvailabilitySlot[]): BookingCandidate[] {
@@ -42,7 +90,8 @@ const ORDINAL_PATTERNS: [RegExp, number][] = [
   [/\bthree\b/, 3],
 ];
 
-const REJECTION_PATTERN = /\b(none|neither|nope|no thanks|doesn't work|don't work|not (?:good|working|ok|available))\b/i;
+const REJECTION_PATTERN =
+  /\b(none(?: of (?:those|these|them))?|neither|nope|no thanks?|can(?:'|no)?t (?:make it|do (?:it|any)|attend)|won'?t work|doesn'?t work|don'?t work|not (?:good|working|ok|okay|available|free|able))\b/i;
 
 /**
  * Resolves which offered candidate the client picked, from either the
@@ -70,4 +119,15 @@ export function resolveSlotSelection(params: {
 
 export function isRejectingCandidates(text: string): boolean {
   return REJECTION_PATTERN.test(text);
+}
+
+const AFFIRMATIVE_PATTERN = /\b(yes|yeah|yep|yup|correct|confirm(?:ed)?|that'?s (?:it|right|the one))\b/i;
+const NEGATIVE_PATTERN = /\b(no|nope|not (?:it|that|right|correct)|wrong)\b/i;
+
+export function isAffirmative(text: string): boolean {
+  return AFFIRMATIVE_PATTERN.test(text);
+}
+
+export function isNegative(text: string): boolean {
+  return NEGATIVE_PATTERN.test(text);
 }

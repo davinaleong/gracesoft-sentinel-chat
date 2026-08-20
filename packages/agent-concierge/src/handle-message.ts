@@ -1,18 +1,27 @@
 import type {
   AIProvider,
+  Booking,
   BusinessConfig,
   CalendarProvider,
   ConversationState,
   NormalizedMessage,
   NormalizedResponse,
 } from "@gracesoft-sentinel/core";
+import type { Dayjs } from "dayjs";
 import { resolveDayHours, isWithinHours } from "./business-hours.js";
+import { extractAppointmentId, generateAppointmentId } from "./appointment-id.js";
 import { parseBookingRequest } from "./booking-intent.js";
 import {
+  bookingsMadeToday,
+  DAILY_BOOKING_LIMIT,
   formatSlotLabel,
+  incrementBookingsToday,
+  isAffirmative,
+  isNegative,
   isRejectingCandidates,
   resolveSlotSelection,
   toBookingCandidates,
+  withContext,
   type ConciergeContext,
 } from "./booking-state.js";
 import type { FaqGroundingBlueprint } from "./faq-matcher.js";
@@ -36,10 +45,6 @@ export interface ConciergeHandleMessageResult {
   state: ConversationState;
 }
 
-function withContext(state: ConversationState, context: ConciergeContext): ConversationState {
-  return { ...state, context, updatedAt: new Date().toISOString() };
-}
-
 function offerSlotsResponse(
   slots: { start: string; end: string }[],
   timezone: string,
@@ -58,23 +63,35 @@ function offerSlotsResponse(
 
 const BOOKING_FAILED_MESSAGE =
   "Sorry, I couldn't complete that booking right now — please try again in a moment, or let us know if it keeps happening.";
+const DAILY_LIMIT_MESSAGE =
+  "You've reached today's booking limit for new appointments — please contact us directly if this is urgent, or try again tomorrow.";
+const NO_BOOKING_FOUND_MESSAGE = "I couldn't find a booking with that appointment ID — could you double-check it?";
 
-async function confirmBooking(params: {
+/** Creates a brand-new booking: generates its appointment id, enforces the daily cap, and reports both back to the chatter. */
+async function createNewBooking(params: {
   calendarProvider: CalendarProvider;
   businessConfig: BusinessConfig;
   message: NormalizedMessage;
   start: string;
   end: string;
   state: ConversationState;
+  now: Dayjs;
 }): Promise<ConciergeHandleMessageResult> {
-  let booking;
+  const context = (params.state.context ?? {}) as ConciergeContext;
+  if (bookingsMadeToday(context, params.now) >= DAILY_BOOKING_LIMIT) {
+    return { response: { text: DAILY_LIMIT_MESSAGE }, state: withContext(params.state, { bookingCandidates: undefined }) };
+  }
+
+  const appointmentId = generateAppointmentId();
+  let booking: Booking;
   try {
     booking = await params.calendarProvider.createBooking({
       calendarId: params.businessConfig.calendarId,
       start: params.start,
       end: params.end,
       timezone: params.businessConfig.timezone,
-      summary: `Booking via ${params.message.channel}`,
+      summary: `${appointmentId} ${params.message.channel}`,
+      appointmentId,
       attendee: { contact: params.message.senderId },
     });
   } catch (err) {
@@ -82,13 +99,56 @@ async function confirmBooking(params: {
     // silent failure — the ack already happened at the channel layer, so
     // without this the chatter would simply get no response at all.
     console.error("[agent-concierge] createBooking failed:", err);
-    return { response: { text: BOOKING_FAILED_MESSAGE }, state: withContext(params.state, {}) };
+    return { response: { text: BOOKING_FAILED_MESSAGE }, state: withContext(params.state, { bookingCandidates: undefined }) };
   }
 
   const label = formatSlotLabel(booking.start, params.businessConfig.timezone);
   return {
-    response: { text: `You're booked for ${label}. See you then!` },
-    state: withContext(params.state, {}),
+    response: {
+      text: `You're booked for ${label}. Your appointment ID is ${booking.appointmentId} — please keep this, you'll need it to check or change this booking later.`,
+    },
+    state: withContext(params.state, {
+      bookingCandidates: undefined,
+      lastAppointmentId: booking.appointmentId,
+      bookingsToday: incrementBookingsToday(context, params.now),
+    }),
+  };
+}
+
+/** Moves an already-existing booking (found via appointment id) to a newly selected slot. */
+async function moveExistingBooking(params: {
+  calendarProvider: CalendarProvider;
+  businessConfig: BusinessConfig;
+  bookingId: string;
+  start: string;
+  end: string;
+  state: ConversationState;
+}): Promise<ConciergeHandleMessageResult> {
+  let booking: Booking;
+  try {
+    booking = await params.calendarProvider.updateBooking({
+      calendarId: params.businessConfig.calendarId,
+      id: params.bookingId,
+      start: params.start,
+      end: params.end,
+      timezone: params.businessConfig.timezone,
+    });
+  } catch (err) {
+    console.error("[agent-concierge] updateBooking failed:", err);
+    return {
+      response: { text: BOOKING_FAILED_MESSAGE },
+      state: withContext(params.state, { bookingCandidates: undefined, reschedulingBookingId: undefined }),
+    };
+  }
+
+  const label = formatSlotLabel(booking.start, params.businessConfig.timezone);
+  return {
+    response: { text: `Your appointment (${booking.appointmentId}) has been moved to ${label}. See you then!` },
+    state: withContext(params.state, {
+      bookingCandidates: undefined,
+      reschedulingBookingId: undefined,
+      lastAppointmentId: booking.appointmentId,
+    }),
   };
 }
 
@@ -98,6 +158,7 @@ async function handlePendingSelection(params: {
   businessConfig: BusinessConfig;
   calendarProvider: CalendarProvider;
   state: ConversationState;
+  now: Dayjs;
 }): Promise<ConciergeHandleMessageResult | undefined> {
   const candidates = params.context.bookingCandidates;
   if (!candidates || candidates.length === 0) return undefined;
@@ -108,21 +169,47 @@ async function handlePendingSelection(params: {
     text: params.message.text,
   });
   if (selected) {
-    return confirmBooking({
+    if (params.context.reschedulingBookingId) {
+      return moveExistingBooking({
+        calendarProvider: params.calendarProvider,
+        businessConfig: params.businessConfig,
+        bookingId: params.context.reschedulingBookingId,
+        start: selected.start,
+        end: selected.end,
+        state: params.state,
+      });
+    }
+    return createNewBooking({
       calendarProvider: params.calendarProvider,
       businessConfig: params.businessConfig,
       message: params.message,
       start: selected.start,
       end: selected.end,
       state: params.state,
+      now: params.now,
     });
   }
 
   if (params.message.text && isRejectingCandidates(params.message.text)) {
-    return {
-      response: { text: "No worries — what date or time would suit you better?" },
-      state: withContext(params.state, {}),
-    };
+    // Search from after the last rejected candidate's end, so the next
+    // batch is guaranteed to be genuinely different slots, not a repeat.
+    // Works identically for a reschedule in progress: reschedulingBookingId
+    // survives untouched, since withContext merges rather than replaces.
+    const lastCandidate = candidates[candidates.length - 1]!;
+    const slots = await findNextAvailableSlots({
+      calendarProvider: params.calendarProvider,
+      calendarId: params.businessConfig.calendarId,
+      businessHours: params.businessConfig.businessHours,
+      timezone: params.businessConfig.timezone,
+      from: dayjs(lastCandidate.end),
+    });
+    if (slots.length === 0) {
+      return {
+        response: { text: "I'm not finding any other openings right now — could you let us know a date or time that works for you?" },
+        state: withContext(params.state, { bookingCandidates: undefined }),
+      };
+    }
+    return offerSlotsResponse(slots, params.businessConfig.timezone, params.state, "No worries — here are some other options:");
   }
 
   return undefined;
@@ -134,7 +221,7 @@ async function handleBookingRequest(params: {
   businessConfig: BusinessConfig;
   calendarProvider: CalendarProvider;
   state: ConversationState;
-  now: ReturnType<typeof businessNow>;
+  now: Dayjs;
 }): Promise<ConciergeHandleMessageResult> {
   const { businessConfig, calendarProvider, state, now } = params;
   const parsed = parseBookingRequest(params.text, now);
@@ -150,13 +237,14 @@ async function handleBookingRequest(params: {
         : false;
 
     if (available) {
-      return confirmBooking({
+      return createNewBooking({
         calendarProvider,
         businessConfig,
         message: params.message,
         start: start.toISOString(),
         end: end.toISOString(),
         state,
+        now,
       });
     }
 
@@ -197,13 +285,14 @@ async function handleBookingRequest(params: {
         timezone: businessConfig.timezone,
       });
       if (available) {
-        return confirmBooking({
+        return createNewBooking({
           calendarProvider,
           businessConfig,
           message: params.message,
           start: todayAtRequestedTime.toISOString(),
           end: end.toISOString(),
           state,
+          now,
         });
       }
       // Today unavailable at that time — roll forward; the engine will skip
@@ -239,6 +328,146 @@ async function handleBookingRequest(params: {
     from: now,
   });
   return offerSlotsResponse(slots, businessConfig.timezone, state, "Here are the next available slots:");
+}
+
+const RESCHEDULE_INTENT_PATTERN =
+  /\b(reschedul\w*|change my (?:appointment|booking)|move my (?:appointment|booking)|different time for my (?:appointment|booking)|change (?:the )?time of my (?:appointment|booking))\b/i;
+
+function looksLikeRescheduleRequest(text: string): boolean {
+  return RESCHEDULE_INTENT_PATTERN.test(text);
+}
+
+/** Offers 3 new slots for an already-located booking; the current slot is never among them since the calendar itself already shows it as busy. */
+async function offerRescheduleSlots(params: {
+  booking: Booking;
+  businessConfig: BusinessConfig;
+  calendarProvider: CalendarProvider;
+  state: ConversationState;
+  now: Dayjs;
+}): Promise<ConciergeHandleMessageResult> {
+  const slots = await findNextAvailableSlots({
+    calendarProvider: params.calendarProvider,
+    calendarId: params.businessConfig.calendarId,
+    businessHours: params.businessConfig.businessHours,
+    timezone: params.businessConfig.timezone,
+    from: params.now,
+  });
+  if (slots.length === 0) {
+    return {
+      response: { text: "I couldn't find any other openings right now — please try again later, or let us know a date/time you'd prefer." },
+      state: withContext(params.state, { awaitingAppointmentId: undefined, pendingRescheduleConfirmationId: undefined }),
+    };
+  }
+
+  const candidates = toBookingCandidates(slots);
+  return {
+    response: {
+      text: `Sure — here are some other times for ${params.booking.appointmentId}:`,
+      quickReplies: candidates.map((c) => ({ id: c.id, label: formatSlotLabel(c.start, params.businessConfig.timezone) })),
+    },
+    state: withContext(params.state, {
+      bookingCandidates: candidates,
+      reschedulingBookingId: params.booking.id,
+      lastAppointmentId: params.booking.appointmentId,
+      awaitingAppointmentId: undefined,
+      pendingRescheduleConfirmationId: undefined,
+    }),
+  };
+}
+
+async function lookupAndOfferReschedule(params: {
+  appointmentId: string;
+  businessConfig: BusinessConfig;
+  calendarProvider: CalendarProvider;
+  state: ConversationState;
+  now: Dayjs;
+}): Promise<ConciergeHandleMessageResult> {
+  const booking = await params.calendarProvider.findBookingByAppointmentId({
+    calendarId: params.businessConfig.calendarId,
+    appointmentId: params.appointmentId,
+  });
+  if (!booking) {
+    return {
+      response: { text: NO_BOOKING_FOUND_MESSAGE },
+      state: withContext(params.state, { awaitingAppointmentId: true, pendingRescheduleConfirmationId: undefined }),
+    };
+  }
+  return offerRescheduleSlots({
+    booking,
+    businessConfig: params.businessConfig,
+    calendarProvider: params.calendarProvider,
+    state: params.state,
+    now: params.now,
+  });
+}
+
+/**
+ * Handles every step of "chatter wants to change their appointment" that
+ * happens *before* slots are offered — verifying which appointment id
+ * they mean. Once a booking is located, `bookingCandidates` +
+ * `reschedulingBookingId` take over and `handlePendingSelection` drives
+ * the rest, same as a fresh booking.
+ *
+ * Per the "frictionless retrieval" design: the appointment id is treated as
+ * the closest thing this system has to proof of ownership, so it's never
+ * acted on without either being typed directly or explicitly confirmed —
+ * `lastAppointmentId` (this same chatter's own most recent booking, within
+ * this session) is offered only as a suggestion, never auto-applied.
+ */
+async function handleReschedulePreOffer(params: {
+  context: ConciergeContext;
+  text: string;
+  businessConfig: BusinessConfig;
+  calendarProvider: CalendarProvider;
+  state: ConversationState;
+  now: Dayjs;
+}): Promise<ConciergeHandleMessageResult | undefined> {
+  const { context, text, businessConfig, calendarProvider, state, now } = params;
+
+  if (context.awaitingAppointmentId) {
+    const appointmentId = extractAppointmentId(text) ?? text.trim().toUpperCase();
+    return lookupAndOfferReschedule({ appointmentId, businessConfig, calendarProvider, state, now });
+  }
+
+  if (context.pendingRescheduleConfirmationId) {
+    const suggested = context.pendingRescheduleConfirmationId;
+    const typedId = extractAppointmentId(text);
+    if (typedId) {
+      return lookupAndOfferReschedule({ appointmentId: typedId, businessConfig, calendarProvider, state, now });
+    }
+    if (isAffirmative(text)) {
+      return lookupAndOfferReschedule({ appointmentId: suggested, businessConfig, calendarProvider, state, now });
+    }
+    if (isNegative(text)) {
+      return {
+        response: { text: "No problem — what's your appointment ID?" },
+        state: withContext(state, { awaitingAppointmentId: true, pendingRescheduleConfirmationId: undefined }),
+      };
+    }
+    return {
+      response: { text: `Just to confirm — did you mean appointment ${suggested}? Reply yes or no, or send the correct appointment ID.` },
+      state,
+    };
+  }
+
+  if (!looksLikeRescheduleRequest(text)) return undefined;
+
+  const typedId = extractAppointmentId(text);
+  if (typedId) {
+    return lookupAndOfferReschedule({ appointmentId: typedId, businessConfig, calendarProvider, state, now });
+  }
+
+  if (context.lastAppointmentId) {
+    return {
+      response: { text: `Looks like you might mean ${context.lastAppointmentId} — is that the one? (yes/no, or send the correct appointment ID)` },
+      state: withContext(state, { pendingRescheduleConfirmationId: context.lastAppointmentId }),
+    };
+  }
+
+  return {
+    response: { text: "Sure — what's your appointment ID? You'll find it in your original booking confirmation." },
+    state: withContext(state, { awaitingAppointmentId: true }),
+  };
 }
 
 function escalate(
@@ -303,10 +532,22 @@ async function handleMessageInner(input: ConciergeHandleMessageInput): Promise<C
     businessConfig,
     calendarProvider,
     state: input.state,
+    now,
   });
   if (pendingSelectionResult) return pendingSelectionResult;
 
   const text = message.text ?? "";
+
+  const rescheduleResult = await handleReschedulePreOffer({
+    context,
+    text,
+    businessConfig,
+    calendarProvider,
+    state: input.state,
+    now,
+  });
+  if (rescheduleResult) return rescheduleResult;
+
   const parsed = parseBookingRequest(text, now);
   const looksLikeBookingRequest = parsed.hasBookingIntent || parsed.date !== undefined || parsed.time !== undefined;
 
@@ -325,7 +566,7 @@ async function handleMessageInner(input: ConciergeHandleMessageInput): Promise<C
   if (answer.escalate) {
     return escalate(input.state, message, answer.text);
   }
-  return { response: { text: answer.text }, state: withContext(input.state, context) };
+  return { response: { text: answer.text }, state: withContext(input.state, {}) };
 }
 
 /**
@@ -334,13 +575,24 @@ async function handleMessageInner(input: ConciergeHandleMessageInput): Promise<C
  * every new conversation. Applied as a wrapper so every response path
  * (booking, FAQ, escalation) gets it exactly once per session, without each
  * branch needing to remember to do it itself.
+ *
+ * `aiDisclosed` is re-stamped onto the outgoing state on *every* turn once
+ * set, not only the turn it's first set on — defense in depth alongside
+ * `withContext`'s merge semantics, since this is a compliance requirement
+ * where "silently regressed" is worse than "redundantly reapplied".
  */
 function withAiDisclosure(
   input: ConciergeHandleMessageInput,
   result: ConciergeHandleMessageResult
 ): ConciergeHandleMessageResult {
+  if (!input.faqBlueprint.ai_disclosure.required) return result;
+
   const alreadyDisclosed = Boolean((input.state.context as ConciergeContext | undefined)?.aiDisclosed);
-  if (alreadyDisclosed || !input.faqBlueprint.ai_disclosure.required) return result;
+  const context = { ...(result.state.context as ConciergeContext), aiDisclosed: true };
+
+  if (alreadyDisclosed) {
+    return { ...result, state: { ...result.state, context } };
+  }
 
   const opening = input.faqBlueprint.ai_disclosure.opening_message;
   const priorText = result.response.text;
@@ -349,10 +601,7 @@ function withAiDisclosure(
       ...result.response,
       text: priorText ? `${opening}\n\n${priorText}` : opening,
     },
-    state: {
-      ...result.state,
-      context: { ...(result.state.context as ConciergeContext), aiDisclosed: true },
-    },
+    state: { ...result.state, context },
   };
 }
 

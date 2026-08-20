@@ -2,10 +2,12 @@ import { handleMessage, type FaqGroundingBlueprint } from "@gracesoft-sentinel/a
 import type { AIProvider, BusinessConfig, CalendarProvider, ConversationState, NormalizedMessage, NormalizedResponse, SessionStore } from "@gracesoft-sentinel/core";
 import { redactPii, type Logger } from "@gracesoft-sentinel/logging";
 import type { ConversationLogger } from "@gracesoft-sentinel/logging-postgres";
+import type { RedisRateLimiter } from "@gracesoft-sentinel/provider-session-redis";
 import { withBookingLogging } from "./logging-calendar-provider.js";
 
 const DEFAULT_SESSION_TTL_SECONDS = 60 * 60 * 24; // 24h — long enough to span a slow-to-reply booking flow, short enough not to accumulate forever
 const NO_TENANT_MESSAGE = "Sorry, this number isn't set up with us yet. Please contact the business directly.";
+const RATE_LIMITED_MESSAGE = "You're sending messages a bit quickly — please wait a moment and try again.";
 
 export interface TenantContext {
   businessConfig: BusinessConfig;
@@ -27,6 +29,14 @@ export interface OnMessageDeps {
   conversationLogger: ConversationLogger;
   appLogger: Logger;
   sessionTtlSeconds?: number;
+  /**
+   * Per-chatter floor against message flooding, independent of the
+   * webhook's own per-source-IP limiter (see `server.ts`) — that one can't
+   * distinguish one abusive chatter from another, since all legitimate
+   * traffic already shares Telegram's/Meta's own IPs. Optional so tests
+   * and any deployment that hasn't wired Redis for this yet keep working.
+   */
+  rateLimiter?: RedisRateLimiter;
 }
 
 function sessionIdFor(message: NormalizedMessage): string {
@@ -64,6 +74,18 @@ export function createOnMessageHandler(deps: OnMessageDeps): (message: Normalize
   return async (message: NormalizedMessage): Promise<NormalizedResponse> => {
     const sessionId = sessionIdFor(message);
     const log = deps.appLogger.child({ sessionId });
+
+    if (deps.rateLimiter) {
+      // Not tenant-scoped: a chatter's own channel identity (their phone
+      // number / Telegram user id) doesn't change across businesses on a
+      // multi-tenant deployment, so scoping by tenant would let them reset
+      // their budget just by being routed to a different one.
+      const { limited } = await deps.rateLimiter.hit(`${message.channel}:${message.senderId}`);
+      if (limited) {
+        log.warn({ channel: message.channel }, "sender rate limit exceeded");
+        return { text: RATE_LIMITED_MESSAGE };
+      }
+    }
 
     const tenant = deps.resolveTenant(message);
     if (!tenant) {

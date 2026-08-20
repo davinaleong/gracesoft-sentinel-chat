@@ -92,7 +92,42 @@ describe("handleMessage — no date/time given", () => {
     expect(calendarProvider.createBookingCalls[0]!.start).toBe(slot2.start);
   });
 
-  it("falls through to a re-prompt when the client rejects all 3 offered slots", async () => {
+  it("offers a fresh set of 3 slots when the client rejects all 3 offered", async () => {
+    const calendarProvider = fullyAvailableCalendarProvider();
+    const aiProvider = fakeAiProviderAnswering("unused");
+    const first = await handleMessage({
+      message: makeMessage({ text: "book something" }),
+      state: makeDisclosedState(),
+      businessConfig: TEST_BUSINESS_CONFIG,
+      calendarProvider,
+      aiProvider,
+      faqBlueprint: TEST_FAQ_BLUEPRINT,
+      now: NOW,
+    });
+    const firstCandidates = (first.state.context as ConciergeContext).bookingCandidates!;
+
+    const second = await handleMessage({
+      message: makeMessage({ text: "none of those work for me" }),
+      state: first.state,
+      businessConfig: TEST_BUSINESS_CONFIG,
+      calendarProvider,
+      aiProvider,
+      faqBlueprint: TEST_FAQ_BLUEPRINT,
+      now: NOW,
+    });
+
+    expect(second.response.quickReplies).toHaveLength(3);
+    expect(calendarProvider.createBookingCalls).toHaveLength(0);
+    const secondCandidates = (second.state.context as ConciergeContext).bookingCandidates!;
+    expect(secondCandidates).toHaveLength(3);
+    // Genuinely different slots, not a repeat of what was just rejected.
+    const firstStarts = new Set(firstCandidates.map((c) => c.start));
+    for (const candidate of secondCandidates) {
+      expect(firstStarts.has(candidate.start)).toBe(false);
+    }
+  });
+
+  it("recognizes natural rejection phrasing beyond just 'none of those work'", async () => {
     const calendarProvider = fullyAvailableCalendarProvider();
     const aiProvider = fakeAiProviderAnswering("unused");
     const first = await handleMessage({
@@ -106,7 +141,7 @@ describe("handleMessage — no date/time given", () => {
     });
 
     const second = await handleMessage({
-      message: makeMessage({ text: "none of those work for me" }),
+      message: makeMessage({ text: "i can't make it for any of those slots" }),
       state: first.state,
       businessConfig: TEST_BUSINESS_CONFIG,
       calendarProvider,
@@ -115,9 +150,8 @@ describe("handleMessage — no date/time given", () => {
       now: NOW,
     });
 
-    expect(second.response.text).toMatch(/what date or time would suit you better/i);
+    expect(second.response.quickReplies).toHaveLength(3);
     expect(calendarProvider.createBookingCalls).toHaveLength(0);
-    expect((second.state.context as ConciergeContext).bookingCandidates).toBeUndefined();
   });
 });
 
@@ -446,6 +480,48 @@ describe("handleMessage — AI disclosure", () => {
 
     expect(second.response.text).not.toContain(OPENING_MESSAGE);
   });
+
+  it("survives a turn that rebuilds context from scratch (regression: offering slots used to silently drop aiDisclosed, re-showing the intro on the turn after)", async () => {
+    const calendarProvider = fullyAvailableCalendarProvider();
+    const aiProvider = fakeAiProviderAnswering("We're open weekdays.", false);
+
+    // Turn 1: fresh session, disclosure shown.
+    const first = await handleMessage({
+      message: makeMessage({ text: "What are your opening hours?" }),
+      state: makeState(),
+      businessConfig: TEST_BUSINESS_CONFIG,
+      calendarProvider,
+      aiProvider,
+      faqBlueprint: TEST_FAQ_BLUEPRINT,
+      now: NOW,
+    });
+    expect(first.response.text).toContain(OPENING_MESSAGE);
+
+    // Turn 2: booking path — offerSlotsResponse rebuilds context as just
+    // { bookingCandidates }, the exact branch that used to lose aiDisclosed.
+    const second = await handleMessage({
+      message: makeMessage({ text: "book something" }),
+      state: first.state,
+      businessConfig: TEST_BUSINESS_CONFIG,
+      calendarProvider,
+      aiProvider,
+      faqBlueprint: TEST_FAQ_BLUEPRINT,
+      now: NOW,
+    });
+    expect(second.response.text).not.toContain(OPENING_MESSAGE);
+
+    // Turn 3: if aiDisclosed didn't survive turn 2, the intro would wrongly reappear here.
+    const third = await handleMessage({
+      message: makeMessage({ text: "none of those work for me" }),
+      state: second.state,
+      businessConfig: TEST_BUSINESS_CONFIG,
+      calendarProvider,
+      aiProvider,
+      faqBlueprint: TEST_FAQ_BLUEPRINT,
+      now: NOW,
+    });
+    expect(third.response.text).not.toContain(OPENING_MESSAGE);
+  });
 });
 
 describe("handleMessage — voice notes", () => {
@@ -543,5 +619,223 @@ describe("handleMessage — voice notes", () => {
     expect(aiProvider.transcribeAudioCalls).toHaveLength(0);
     // No text and no booking intent -> falls through to FAQ, which escalates on an empty question.
     expect(result.response.text).toBeDefined();
+  });
+});
+
+const APPOINTMENT_ID_PATTERN = /GS-[0-9A-Z]{4}-[0-9A-Z]{4}/;
+
+describe("handleMessage — appointment ids & daily booking cap", () => {
+  it("returns an appointment id in the confirmation and stores it as lastAppointmentId", async () => {
+    const result = await handleMessage({
+      message: makeMessage({ text: "book for 4 May at 11am" }),
+      state: makeDisclosedState(),
+      businessConfig: TEST_BUSINESS_CONFIG,
+      calendarProvider: fullyAvailableCalendarProvider(),
+      aiProvider: fakeAiProviderAnswering("unused"),
+      faqBlueprint: TEST_FAQ_BLUEPRINT,
+      now: NOW,
+    });
+    const match = result.response.text?.match(APPOINTMENT_ID_PATTERN);
+    expect(match).not.toBeNull();
+    expect((result.state.context as ConciergeContext).lastAppointmentId).toBe(match![0]);
+  });
+
+  it("stores the appointment id in the calendar event summary as '<id> <channel>'", async () => {
+    const calendarProvider = fullyAvailableCalendarProvider();
+    await handleMessage({
+      message: makeMessage({ text: "book for 4 May at 11am", channel: "telegram" }),
+      state: makeDisclosedState(),
+      businessConfig: TEST_BUSINESS_CONFIG,
+      calendarProvider,
+      aiProvider: fakeAiProviderAnswering("unused"),
+      faqBlueprint: TEST_FAQ_BLUEPRINT,
+      now: NOW,
+    });
+    const call = calendarProvider.createBookingCalls[0]!;
+    expect(call.summary).toBe(`${call.appointmentId} telegram`);
+  });
+
+  it("blocks a 4th booking in the same day once the daily cap is reached", async () => {
+    const calendarProvider = fullyAvailableCalendarProvider();
+    const aiProvider = fakeAiProviderAnswering("unused");
+    let state = makeDisclosedState();
+    const times = ["11am", "1pm", "3pm", "5pm"];
+    let last;
+    for (const time of times) {
+      last = await handleMessage({
+        message: makeMessage({ text: `book for 4 May at ${time}` }),
+        state,
+        businessConfig: TEST_BUSINESS_CONFIG,
+        calendarProvider,
+        aiProvider,
+        faqBlueprint: TEST_FAQ_BLUEPRINT,
+        now: NOW,
+      });
+      state = last.state;
+    }
+    expect(calendarProvider.createBookingCalls).toHaveLength(3);
+    expect(last!.response.text).toMatch(/reached today's booking limit/i);
+  });
+});
+
+describe("handleMessage — rescheduling", () => {
+  async function bookInitialAppointment(calendarProvider: ReturnType<typeof fullyAvailableCalendarProvider>) {
+    const result = await handleMessage({
+      message: makeMessage({ text: "book for 4 May at 11am" }),
+      state: makeDisclosedState(),
+      businessConfig: TEST_BUSINESS_CONFIG,
+      calendarProvider,
+      aiProvider: fakeAiProviderAnswering("unused"),
+      faqBlueprint: TEST_FAQ_BLUEPRINT,
+      now: NOW,
+    });
+    const appointmentId = (result.state.context as ConciergeContext).lastAppointmentId!;
+    return { state: result.state, appointmentId };
+  }
+
+  it("offers new slots when the chatter provides their appointment id directly, and moves the booking on selection", async () => {
+    const calendarProvider = fullyAvailableCalendarProvider();
+    const aiProvider = fakeAiProviderAnswering("unused");
+    const { state: afterBooking, appointmentId } = await bookInitialAppointment(calendarProvider);
+
+    const offer = await handleMessage({
+      message: makeMessage({ text: `I need to reschedule ${appointmentId}` }),
+      state: afterBooking,
+      businessConfig: TEST_BUSINESS_CONFIG,
+      calendarProvider,
+      aiProvider,
+      faqBlueprint: TEST_FAQ_BLUEPRINT,
+      now: NOW,
+    });
+    expect(offer.response.text).toContain(appointmentId);
+    expect(offer.response.quickReplies).toHaveLength(3);
+    // The moment the booking is being rescheduled, not one of the new candidates.
+    expect(offer.response.quickReplies!.map((q) => q.label)).not.toContain(formatSlotLabel("2026-05-04T11:00:00+08:00", "Asia/Singapore"));
+
+    const moved = await handleMessage({
+      message: makeMessage({ quickReplyId: "slot-1" }),
+      state: offer.state,
+      businessConfig: TEST_BUSINESS_CONFIG,
+      calendarProvider,
+      aiProvider,
+      faqBlueprint: TEST_FAQ_BLUEPRINT,
+      now: NOW,
+    });
+    expect(moved.response.text).toMatch(/has been moved to/i);
+    expect(moved.response.text).toContain(appointmentId);
+    expect(calendarProvider.updateBookingCalls).toHaveLength(1);
+    expect(calendarProvider.createBookingCalls).toHaveLength(1); // no duplicate booking created
+  });
+
+  it("suggests the chatter's own last appointment id and proceeds once confirmed", async () => {
+    const calendarProvider = fullyAvailableCalendarProvider();
+    const aiProvider = fakeAiProviderAnswering("unused");
+    const { state: afterBooking, appointmentId } = await bookInitialAppointment(calendarProvider);
+
+    const suggestion = await handleMessage({
+      message: makeMessage({ text: "I want to reschedule my appointment" }),
+      state: afterBooking,
+      businessConfig: TEST_BUSINESS_CONFIG,
+      calendarProvider,
+      aiProvider,
+      faqBlueprint: TEST_FAQ_BLUEPRINT,
+      now: NOW,
+    });
+    expect(suggestion.response.text).toContain(appointmentId);
+    expect((suggestion.state.context as ConciergeContext).pendingRescheduleConfirmationId).toBe(appointmentId);
+
+    const confirmed = await handleMessage({
+      message: makeMessage({ text: "yes that's the one" }),
+      state: suggestion.state,
+      businessConfig: TEST_BUSINESS_CONFIG,
+      calendarProvider,
+      aiProvider,
+      faqBlueprint: TEST_FAQ_BLUEPRINT,
+      now: NOW,
+    });
+    expect(confirmed.response.quickReplies).toHaveLength(3);
+  });
+
+  it("asks for the id directly when the suggested one is rejected", async () => {
+    const calendarProvider = fullyAvailableCalendarProvider();
+    const aiProvider = fakeAiProviderAnswering("unused");
+    const { state: afterBooking } = await bookInitialAppointment(calendarProvider);
+
+    const suggestion = await handleMessage({
+      message: makeMessage({ text: "I want to reschedule my appointment" }),
+      state: afterBooking,
+      businessConfig: TEST_BUSINESS_CONFIG,
+      calendarProvider,
+      aiProvider,
+      faqBlueprint: TEST_FAQ_BLUEPRINT,
+      now: NOW,
+    });
+
+    const declined = await handleMessage({
+      message: makeMessage({ text: "no, wrong one" }),
+      state: suggestion.state,
+      businessConfig: TEST_BUSINESS_CONFIG,
+      calendarProvider,
+      aiProvider,
+      faqBlueprint: TEST_FAQ_BLUEPRINT,
+      now: NOW,
+    });
+    expect(declined.response.text).toMatch(/what's your appointment id/i);
+    expect((declined.state.context as ConciergeContext).awaitingAppointmentId).toBe(true);
+  });
+
+  it("reports no booking found for an unrecognized appointment id, and keeps awaiting a correction", async () => {
+    const result = await handleMessage({
+      message: makeMessage({ text: "reschedule GS-ZZZZ-9999" }),
+      state: makeDisclosedState(),
+      businessConfig: TEST_BUSINESS_CONFIG,
+      calendarProvider: fullyAvailableCalendarProvider(),
+      aiProvider: fakeAiProviderAnswering("unused"),
+      faqBlueprint: TEST_FAQ_BLUEPRINT,
+      now: NOW,
+    });
+    expect(result.response.text).toMatch(/couldn't find a booking/i);
+    expect((result.state.context as ConciergeContext).awaitingAppointmentId).toBe(true);
+  });
+
+  it("rejecting the offered reschedule slots offers a fresh batch for the same booking, not a duplicate", async () => {
+    const calendarProvider = fullyAvailableCalendarProvider();
+    const aiProvider = fakeAiProviderAnswering("unused");
+    const { state: afterBooking, appointmentId } = await bookInitialAppointment(calendarProvider);
+
+    const firstOffer = await handleMessage({
+      message: makeMessage({ text: `reschedule ${appointmentId}` }),
+      state: afterBooking,
+      businessConfig: TEST_BUSINESS_CONFIG,
+      calendarProvider,
+      aiProvider,
+      faqBlueprint: TEST_FAQ_BLUEPRINT,
+      now: NOW,
+    });
+
+    const secondOffer = await handleMessage({
+      message: makeMessage({ text: "none of those work" }),
+      state: firstOffer.state,
+      businessConfig: TEST_BUSINESS_CONFIG,
+      calendarProvider,
+      aiProvider,
+      faqBlueprint: TEST_FAQ_BLUEPRINT,
+      now: NOW,
+    });
+    expect(secondOffer.response.quickReplies).toHaveLength(3);
+    expect((secondOffer.state.context as ConciergeContext).reschedulingBookingId).toBeDefined();
+
+    const moved = await handleMessage({
+      message: makeMessage({ quickReplyId: "slot-1" }),
+      state: secondOffer.state,
+      businessConfig: TEST_BUSINESS_CONFIG,
+      calendarProvider,
+      aiProvider,
+      faqBlueprint: TEST_FAQ_BLUEPRINT,
+      now: NOW,
+    });
+    expect(calendarProvider.updateBookingCalls).toHaveLength(1);
+    expect(calendarProvider.createBookingCalls).toHaveLength(1);
+    expect(moved.response.text).toMatch(/has been moved to/i);
   });
 });

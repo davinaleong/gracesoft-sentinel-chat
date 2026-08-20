@@ -2,8 +2,10 @@ import { handleMessage } from "@gracesoft-sentinel/agent-cook";
 import type { AIProvider, ConversationState, NormalizedMessage, NormalizedResponse, RecipeSourceProvider, SessionStore } from "@gracesoft-sentinel/core";
 import { redactPii, type Logger } from "@gracesoft-sentinel/logging";
 import type { ConversationLogger } from "@gracesoft-sentinel/logging-postgres";
+import type { RedisRateLimiter } from "@gracesoft-sentinel/provider-session-redis";
 
 const DEFAULT_SESSION_TTL_SECONDS = 60 * 60; // 1h — Cook's flow is single-photo-in, single-recipe-out; short-lived by design
+const RATE_LIMITED_MESSAGE = "You're sending messages a bit quickly — please wait a moment and try again.";
 
 export interface OnMessageDeps {
   aiProvider: AIProvider;
@@ -13,6 +15,8 @@ export interface OnMessageDeps {
   sessionTtlSeconds?: number;
   /** "Mother's Day Edition" (Milestone 11), opt-in — see agent-cook's CookHandleMessageInput. */
   recipeSourceProvider?: RecipeSourceProvider;
+  /** Per-chatter floor against flooding — see concierge-service's equivalent for the design rationale. */
+  rateLimiter?: RedisRateLimiter;
 }
 
 function sessionIdFor(message: NormalizedMessage): string {
@@ -41,6 +45,15 @@ export function createOnMessageHandler(deps: OnMessageDeps): (message: Normalize
   return async (message: NormalizedMessage): Promise<NormalizedResponse> => {
     const sessionId = sessionIdFor(message);
     const log = deps.appLogger.child({ sessionId });
+
+    if (deps.rateLimiter) {
+      const { limited } = await deps.rateLimiter.hit(`${message.channel}:${message.senderId}`);
+      if (limited) {
+        log.warn({ channel: message.channel }, "sender rate limit exceeded");
+        return { text: RATE_LIMITED_MESSAGE };
+      }
+    }
+
     const state = (await deps.sessionStore.get(sessionId)) ?? freshState(sessionId, message);
 
     await logSafely(deps.conversationLogger, log, {

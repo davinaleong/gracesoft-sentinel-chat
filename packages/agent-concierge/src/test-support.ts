@@ -10,10 +10,12 @@ import type {
   CreateBookingInput,
   EmbedInput,
   EmbedResult,
+  FindBookingByAppointmentIdInput,
   GetAvailabilityInput,
   GetBusinessHoursInput,
   TranscribeAudioInput,
   TranscribeAudioResult,
+  UpdateBookingInput,
   VisionAnalyzeInput,
   VisionAnalyzeResult,
 } from "@gracesoft-sentinel/core";
@@ -119,7 +121,9 @@ export function fakeAiProviderWithTranscription(transcribedText: string, faqAnsw
 
 class RecordingCalendarProvider implements CalendarProvider {
   public createBookingCalls: CreateBookingInput[] = [];
+  public updateBookingCalls: UpdateBookingInput[] = [];
   private nextId = 1;
+  private readonly bookingsById = new Map<string, Booking>();
 
   constructor(
     private readonly busyWindows: { start: string; end: string }[] = [],
@@ -131,7 +135,11 @@ class RecordingCalendarProvider implements CalendarProvider {
     const to = new Date(input.to).getTime();
     if (from >= to) return [];
 
-    const busyInRange = this.busyWindows
+    const allBusy = [
+      ...this.busyWindows,
+      ...[...this.bookingsById.values()].map((b) => ({ start: b.start, end: b.end })),
+    ];
+    const busyInRange = allBusy
       .map((w) => ({ start: new Date(w.start).getTime(), end: new Date(w.end).getTime() }))
       .filter((w) => w.end > from && w.start < to)
       .sort((a, b) => a.start - b.start);
@@ -152,7 +160,25 @@ class RecordingCalendarProvider implements CalendarProvider {
 
   async createBooking(input: CreateBookingInput): Promise<Booking> {
     this.createBookingCalls.push(input);
-    return { id: `booking-${this.nextId++}`, start: input.start, end: input.end };
+    const booking: Booking = { id: `booking-${this.nextId++}`, appointmentId: input.appointmentId, start: input.start, end: input.end };
+    this.bookingsById.set(booking.id, booking);
+    return booking;
+  }
+
+  async findBookingByAppointmentId(input: FindBookingByAppointmentIdInput): Promise<Booking | null> {
+    for (const booking of this.bookingsById.values()) {
+      if (booking.appointmentId === input.appointmentId) return booking;
+    }
+    return null;
+  }
+
+  async updateBooking(input: UpdateBookingInput): Promise<Booking> {
+    this.updateBookingCalls.push(input);
+    const existing = this.bookingsById.get(input.id);
+    if (!existing) throw new Error(`No booking with id ${input.id}`);
+    const updated: Booking = { ...existing, start: input.start, end: input.end };
+    this.bookingsById.set(updated.id, updated);
+    return updated;
   }
 
   async getBusinessHours(_input: GetBusinessHoursInput): Promise<BusinessHours> {

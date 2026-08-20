@@ -50,7 +50,7 @@ describe("GoogleCalendarProvider — request shaping", () => {
     ]);
   });
 
-  it("createBooking maps CreateBookingInput onto the Google event shape", async () => {
+  it("createBooking maps CreateBookingInput onto the Google event shape, storing appointmentId in extendedProperties", async () => {
     const client = new FakeGoogleCalendarClient();
     const provider = new GoogleCalendarProvider({ client, businessHours: BUSINESS_HOURS });
 
@@ -59,19 +59,22 @@ describe("GoogleCalendarProvider — request shaping", () => {
       start: "2026-05-04T10:00:00+08:00",
       end: "2026-05-04T10:30:00+08:00",
       timezone: "Asia/Singapore",
-      summary: "Booking via whatsapp",
+      summary: "GS-ABCD-1234 whatsapp",
+      appointmentId: "GS-ABCD-1234",
       attendee: { name: "Alex Tan", contact: "alex@example.com" },
     });
 
     expect(client.insertCalls).toHaveLength(1);
     expect(client.insertCalls[0]!.requestBody).toEqual({
-      summary: "Booking via whatsapp",
+      summary: "GS-ABCD-1234 whatsapp",
       description: "Booked for Alex Tan",
       start: { dateTime: "2026-05-04T10:00:00+08:00", timeZone: "Asia/Singapore" },
       end: { dateTime: "2026-05-04T10:30:00+08:00", timeZone: "Asia/Singapore" },
       attendees: [{ email: "alex@example.com" }],
+      extendedProperties: { private: { appointmentId: "GS-ABCD-1234" } },
     });
     expect(booking.id).toBe("event-1");
+    expect(booking.appointmentId).toBe("GS-ABCD-1234");
   });
 
   it("createBooking omits attendees when the contact isn't email-shaped", async () => {
@@ -83,11 +86,61 @@ describe("GoogleCalendarProvider — request shaping", () => {
       start: "2026-05-04T10:00:00+08:00",
       end: "2026-05-04T10:30:00+08:00",
       timezone: "Asia/Singapore",
-      summary: "Booking via whatsapp",
+      summary: "GS-ABCD-1234 whatsapp",
+      appointmentId: "GS-ABCD-1234",
       attendee: { contact: "+6591234567" },
     });
 
     expect(client.insertCalls[0]!.requestBody.attendees).toBeUndefined();
+  });
+
+  it("findBookingByAppointmentId filters events.list by the private extended property", async () => {
+    const client = new FakeGoogleCalendarClient();
+    const provider = new GoogleCalendarProvider({ client, businessHours: BUSINESS_HOURS });
+    await provider.createBooking({
+      calendarId: "test-calendar",
+      start: "2026-05-04T10:00:00+08:00",
+      end: "2026-05-04T10:30:00+08:00",
+      timezone: "Asia/Singapore",
+      summary: "GS-ABCD-1234 whatsapp",
+      appointmentId: "GS-ABCD-1234",
+    });
+
+    const found = await provider.findBookingByAppointmentId({ calendarId: "test-calendar", appointmentId: "GS-ABCD-1234" });
+
+    expect(client.listCalls[0]).toMatchObject({
+      calendarId: "test-calendar",
+      privateExtendedProperty: ["appointmentId=GS-ABCD-1234"],
+    });
+    expect(found?.appointmentId).toBe("GS-ABCD-1234");
+  });
+
+  it("updateBooking patches only start/end, preserving the event's appointmentId", async () => {
+    const client = new FakeGoogleCalendarClient();
+    const provider = new GoogleCalendarProvider({ client, businessHours: BUSINESS_HOURS });
+    const created = await provider.createBooking({
+      calendarId: "test-calendar",
+      start: "2026-05-04T10:00:00+08:00",
+      end: "2026-05-04T10:30:00+08:00",
+      timezone: "Asia/Singapore",
+      summary: "GS-ABCD-1234 whatsapp",
+      appointmentId: "GS-ABCD-1234",
+    });
+
+    const updated = await provider.updateBooking({
+      calendarId: "test-calendar",
+      id: created.id,
+      start: "2026-05-05T14:00:00+08:00",
+      end: "2026-05-05T14:30:00+08:00",
+      timezone: "Asia/Singapore",
+    });
+
+    expect(client.patchCalls[0]!.requestBody).toEqual({
+      start: { dateTime: "2026-05-05T14:00:00+08:00", timeZone: "Asia/Singapore" },
+      end: { dateTime: "2026-05-05T14:30:00+08:00", timeZone: "Asia/Singapore" },
+    });
+    expect(updated.id).toBe(created.id);
+    expect(updated.appointmentId).toBe("GS-ABCD-1234");
   });
 
   it("getBusinessHours returns the configured BusinessHours, including dated exceptions", async () => {

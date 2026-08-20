@@ -1,8 +1,36 @@
 import { describe, expect, it } from "vitest";
 import type { BusinessConfig, CalendarProvider, NormalizedMessage } from "@gracesoft-sentinel/core";
 import type { FaqGroundingBlueprint } from "@gracesoft-sentinel/agent-concierge";
+import { RedisRateLimiter, type RedisLikeClient } from "@gracesoft-sentinel/provider-session-redis";
 import { createOnMessageHandler, type TenantContext } from "./on-message.js";
 import { FakeAiProvider, FakeCalendarProvider, FakeConversationLogger, FakeSessionStore, createSilentTestLogger } from "./test-support.js";
+
+/** Minimal local double — provider-session-redis's own fake is package-internal, not part of its public exports. */
+class InMemoryRedisLikeClient implements RedisLikeClient {
+  private readonly store = new Map<string, string>();
+  async get(key: string) {
+    return this.store.get(key) ?? null;
+  }
+  async set(key: string, value: string) {
+    this.store.set(key, value);
+    return "OK";
+  }
+  async setex(key: string, _seconds: number, value: string) {
+    this.store.set(key, value);
+    return "OK";
+  }
+  async del(key: string) {
+    return this.store.delete(key) ? 1 : 0;
+  }
+  async incr(key: string) {
+    const next = (Number(this.store.get(key)) || 0) + 1;
+    this.store.set(key, String(next));
+    return next;
+  }
+  async expire(_key: string, _seconds: number) {
+    return 1;
+  }
+}
 
 const BUSINESS_CONFIG: BusinessConfig = {
   businessId: "test-biz",
@@ -179,5 +207,62 @@ describe("createOnMessageHandler", () => {
 
     expect(response.text).toMatch(/isn't set up/i);
     expect(sessionStore.setCalls).toHaveLength(0);
+  });
+
+  it("does not rate limit while under the configured budget", async () => {
+    const sessionStore = new FakeSessionStore();
+    const rateLimiter = new RedisRateLimiter({ client: new InMemoryRedisLikeClient(), limit: 2, windowSeconds: 60 });
+    const onMessage = createOnMessageHandler({
+      resolveTenant: singleTenant(),
+      aiProvider: new FakeAiProvider(),
+      sessionStore,
+      conversationLogger: new FakeConversationLogger(),
+      appLogger: createSilentTestLogger(),
+      rateLimiter,
+    });
+
+    const first = await onMessage(makeMessage({ text: "What are your hours?" }));
+    expect(first.text).not.toMatch(/sending messages/i);
+    expect(sessionStore.setCalls).toHaveLength(1);
+  });
+
+  it("replies with a rate-limit message and does no further work once the sender exceeds the budget", async () => {
+    const sessionStore = new FakeSessionStore();
+    const logger = new FakeConversationLogger();
+    const rateLimiter = new RedisRateLimiter({ client: new InMemoryRedisLikeClient(), limit: 1, windowSeconds: 60 });
+    const onMessage = createOnMessageHandler({
+      resolveTenant: singleTenant(),
+      aiProvider: new FakeAiProvider(),
+      sessionStore,
+      conversationLogger: logger,
+      appLogger: createSilentTestLogger(),
+      rateLimiter,
+    });
+
+    await onMessage(makeMessage({ text: "What are your hours?" }));
+    const second = await onMessage(makeMessage({ text: "And your location?" }));
+
+    expect(second.text).toMatch(/sending messages/i);
+    // Only the first message's session write/log happened — the rate-limited
+    // one never reached the agent, session store, or conversation logger.
+    expect(sessionStore.setCalls).toHaveLength(1);
+    expect(logger.messages).toHaveLength(2);
+  });
+
+  it("rate-limits per chatter, independent of which business (tenant) they're messaging", async () => {
+    const rateLimiter = new RedisRateLimiter({ client: new InMemoryRedisLikeClient(), limit: 1, windowSeconds: 60 });
+    const onMessage = createOnMessageHandler({
+      resolveTenant: singleTenant(),
+      aiProvider: new FakeAiProvider(),
+      sessionStore: new FakeSessionStore(),
+      conversationLogger: new FakeConversationLogger(),
+      appLogger: createSilentTestLogger(),
+      rateLimiter,
+    });
+
+    await onMessage(makeMessage({ businessChannelId: "biz-a", senderId: "999", text: "hi" }));
+    const second = await onMessage(makeMessage({ businessChannelId: "biz-b", senderId: "999", text: "hi" }));
+
+    expect(second.text).toMatch(/sending messages/i);
   });
 });

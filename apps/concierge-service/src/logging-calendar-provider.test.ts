@@ -13,7 +13,8 @@ describe("withBookingLogging", () => {
       start: "2026-05-04T01:00:00.000Z",
       end: "2026-05-04T01:30:00.000Z",
       timezone: "Asia/Singapore",
-      summary: "Booking via whatsapp",
+      summary: "GS-AAAA-1111 whatsapp",
+      appointmentId: "GS-AAAA-1111",
     });
 
     expect(inner.createBookingCalls).toHaveLength(1);
@@ -36,12 +37,12 @@ describe("withBookingLogging", () => {
     const wrapped = withBookingLogging(inner, logger, "session-123", createSilentTestLogger());
 
     await expect(
-      wrapped.createBooking({ calendarId: "cal-1", start: "x", end: "y", timezone: "Asia/Singapore", summary: "s" })
+      wrapped.createBooking({ calendarId: "cal-1", start: "x", end: "y", timezone: "Asia/Singapore", summary: "s", appointmentId: "GS-AAAA-1111" })
     ).rejects.toThrow("calendar API down");
     expect(logger.bookings).toHaveLength(0);
   });
 
-  it("passes getAvailability and getBusinessHours straight through", async () => {
+  it("passes getAvailability, getBusinessHours, and findBookingByAppointmentId straight through", async () => {
     const inner = new FakeCalendarProvider();
     const logger = new FakeConversationLogger();
     const wrapped = withBookingLogging(inner, logger, "session-123", createSilentTestLogger());
@@ -51,5 +52,40 @@ describe("withBookingLogging", () => {
 
     const hours = await wrapped.getBusinessHours({ calendarId: "cal-1" });
     expect(hours.timezone).toBe("Asia/Singapore");
+
+    const notFound = await wrapped.findBookingByAppointmentId({ calendarId: "cal-1", appointmentId: "GS-NEVER-0000" });
+    expect(notFound).toBeNull();
+  });
+
+  it("logs a booking after a successful updateBooking, same as a create", async () => {
+    const inner = new FakeCalendarProvider();
+    const logger = new FakeConversationLogger();
+    const wrapped = withBookingLogging(inner, logger, "session-123", createSilentTestLogger());
+
+    const created = await wrapped.createBooking({
+      calendarId: "cal-1",
+      start: "2026-05-04T01:00:00.000Z",
+      end: "2026-05-04T01:30:00.000Z",
+      timezone: "Asia/Singapore",
+      summary: "GS-AAAA-1111 whatsapp",
+      appointmentId: "GS-AAAA-1111",
+    });
+
+    const updated = await wrapped.updateBooking({
+      calendarId: "cal-1",
+      id: created.id,
+      start: "2026-05-05T01:00:00.000Z",
+      end: "2026-05-05T01:30:00.000Z",
+      timezone: "Asia/Singapore",
+    });
+
+    expect(logger.bookings).toHaveLength(2);
+    expect(logger.bookings[1]).toMatchObject({
+      sessionId: "session-123",
+      bookingId: updated.id,
+      calendarId: "cal-1",
+      start: "2026-05-05T01:00:00.000Z",
+      end: "2026-05-05T01:30:00.000Z",
+    });
   });
 });

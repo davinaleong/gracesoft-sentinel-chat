@@ -1,5 +1,5 @@
 import { OpenAIProvider } from "@gracesoft-sentinel/provider-ai-openai";
-import { RedisSessionStore, createRedisClient } from "@gracesoft-sentinel/provider-session-redis";
+import { RedisRateLimiter, RedisSessionStore, createRedisClient } from "@gracesoft-sentinel/provider-session-redis";
 import { PostgresConversationLogger, createPgClient } from "@gracesoft-sentinel/logging-postgres";
 import { createLogger, type Logger } from "@gracesoft-sentinel/logging";
 import { GoogleDriveRecipeProvider, createGoogleDriveClient } from "@gracesoft-sentinel/provider-drive-google";
@@ -44,11 +44,15 @@ export function buildComposition(env: CookServiceEnv): Composition {
 
   const redisClient = createRedisClient(env.REDIS_URL);
   const sessionStore = new RedisSessionStore({ client: redisClient, keyPrefix: "gracesoft-sentinel:cook-session:" });
+  // Separate keyPrefix from concierge-service's limiter: the same phone
+  // number can message both bots, and a flood on one product shouldn't
+  // lock a chatter out of the other.
+  const rateLimiter = new RedisRateLimiter({ client: redisClient, limit: 20, windowSeconds: 60, keyPrefix: "gracesoft-sentinel:cook-ratelimit:" });
 
   const pgClient = createPgClient(env.DATABASE_URL);
   const conversationLogger = new PostgresConversationLogger({ client: pgClient });
 
-  const onMessage = createOnMessageHandler({ aiProvider, sessionStore, conversationLogger, appLogger, recipeSourceProvider });
+  const onMessage = createOnMessageHandler({ aiProvider, sessionStore, conversationLogger, appLogger, recipeSourceProvider, rateLimiter });
 
   const readinessCheck = async (): Promise<boolean> => {
     await redisClient.get("__healthcheck__");

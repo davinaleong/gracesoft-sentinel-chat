@@ -11,6 +11,10 @@ export interface RedisLikeClient {
   set(key: string, value: string): Promise<unknown>;
   setex(key: string, seconds: number, value: string): Promise<unknown>;
   del(key: string): Promise<number>;
+  /** Atomically increments and returns the new value; creates the key at 1 if absent. */
+  incr(key: string): Promise<number>;
+  /** Sets a TTL on an existing key; a no-op if the key doesn't exist. */
+  expire(key: string, seconds: number): Promise<number>;
 }
 
 /** Builds the real `ioredis` client from a connection URL. */

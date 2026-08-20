@@ -5,8 +5,10 @@ import type {
   BusinessHours,
   CalendarProvider,
   CreateBookingInput,
+  FindBookingByAppointmentIdInput,
   GetAvailabilityInput,
   GetBusinessHoursInput,
+  UpdateBookingInput,
 } from "./calendar-provider.js";
 import { BusinessHoursSchema } from "./calendar-provider.js";
 import { runCalendarProviderContractTests } from "./calendar-provider-contract.js";
@@ -18,13 +20,31 @@ import { runCalendarProviderContractTests } from "./calendar-provider-contract.j
  */
 class FakeCalendarProvider implements CalendarProvider {
   private nextId = 1;
+  private readonly bookings = new Map<string, Booking>();
 
   async getAvailability(input: GetAvailabilityInput): Promise<AvailabilitySlot[]> {
     return [{ start: input.from, end: input.to }];
   }
 
   async createBooking(input: CreateBookingInput): Promise<Booking> {
-    return { id: `booking-${this.nextId++}`, start: input.start, end: input.end };
+    const booking: Booking = { id: `booking-${this.nextId++}`, appointmentId: input.appointmentId, start: input.start, end: input.end };
+    this.bookings.set(booking.id, booking);
+    return booking;
+  }
+
+  async findBookingByAppointmentId(input: FindBookingByAppointmentIdInput): Promise<Booking | null> {
+    for (const booking of this.bookings.values()) {
+      if (booking.appointmentId === input.appointmentId) return booking;
+    }
+    return null;
+  }
+
+  async updateBooking(input: UpdateBookingInput): Promise<Booking> {
+    const existing = this.bookings.get(input.id);
+    if (!existing) throw new Error(`No booking with id ${input.id}`);
+    const updated: Booking = { ...existing, start: input.start, end: input.end };
+    this.bookings.set(updated.id, updated);
+    return updated;
   }
 
   async getBusinessHours(_input: GetBusinessHoursInput): Promise<BusinessHours> {

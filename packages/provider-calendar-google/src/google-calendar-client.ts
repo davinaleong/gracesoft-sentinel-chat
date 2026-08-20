@@ -26,15 +26,31 @@ export interface GoogleCalendarClient {
         start: { dateTime: string; timeZone: string };
         end: { dateTime: string; timeZone: string };
         attendees?: { email: string }[];
+        extendedProperties?: { private?: Record<string, string> };
       };
-    }): Promise<{
-      data: {
-        id?: string | null;
-        start?: { dateTime?: string | null } | null;
-        end?: { dateTime?: string | null } | null;
+    }): Promise<{ data: GoogleCalendarEvent }>;
+    /** `privateExtendedProperty` filters as `"key=value"` strings, ANDed together. */
+    list(params: {
+      calendarId: string;
+      privateExtendedProperty?: string[];
+      maxResults?: number;
+    }): Promise<{ data: { items?: GoogleCalendarEvent[] } }>;
+    patch(params: {
+      calendarId: string;
+      eventId: string;
+      requestBody: {
+        start?: { dateTime: string; timeZone: string };
+        end?: { dateTime: string; timeZone: string };
       };
-    }>;
+    }): Promise<{ data: GoogleCalendarEvent }>;
   };
+}
+
+export interface GoogleCalendarEvent {
+  id?: string | null;
+  start?: { dateTime?: string | null } | null;
+  end?: { dateTime?: string | null } | null;
+  extendedProperties?: { private?: Record<string, string> | null } | null;
 }
 
 export interface GoogleCalendarAuthConfig {

@@ -1,5 +1,11 @@
 # @gracesoft-sentinel/core
 
+## 0.4.0
+
+### Minor Changes
+
+- `CreateBookingInput`/`Booking` gain a required `appointmentId` field, and `CalendarProvider` gains `findBookingByAppointmentId`/`updateBooking` — the capability surface behind chatter-facing appointment ids and the reschedule flow. `runCalendarProviderContractTests` now exercises all three; `provider-calendar-google` indexes `appointmentId` via Google Calendar's `extendedProperties.private`, never by parsing event text.
+
 ## 0.3.0
 
 ### Minor Changes

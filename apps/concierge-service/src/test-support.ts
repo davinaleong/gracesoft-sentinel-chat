@@ -10,11 +10,13 @@ import type {
   CreateBookingInput,
   EmbedInput,
   EmbedResult,
+  FindBookingByAppointmentIdInput,
   GetAvailabilityInput,
   GetBusinessHoursInput,
   SessionStore,
   TranscribeAudioInput,
   TranscribeAudioResult,
+  UpdateBookingInput,
   VisionAnalyzeInput,
   VisionAnalyzeResult,
 } from "@gracesoft-sentinel/core";
@@ -29,13 +31,29 @@ export function createSilentTestLogger(): Logger {
 export class FakeCalendarProvider implements CalendarProvider {
   public createBookingCalls: CreateBookingInput[] = [];
   private nextId = 1;
+  private readonly bookingsById = new Map<string, Booking>();
 
   async getAvailability(input: GetAvailabilityInput): Promise<AvailabilitySlot[]> {
     return [{ start: input.from, end: input.to }];
   }
   async createBooking(input: CreateBookingInput): Promise<Booking> {
     this.createBookingCalls.push(input);
-    return { id: `booking-${this.nextId++}`, start: input.start, end: input.end };
+    const booking: Booking = { id: `booking-${this.nextId++}`, appointmentId: input.appointmentId, start: input.start, end: input.end };
+    this.bookingsById.set(booking.id, booking);
+    return booking;
+  }
+  async findBookingByAppointmentId(input: FindBookingByAppointmentIdInput): Promise<Booking | null> {
+    for (const booking of this.bookingsById.values()) {
+      if (booking.appointmentId === input.appointmentId) return booking;
+    }
+    return null;
+  }
+  async updateBooking(input: UpdateBookingInput): Promise<Booking> {
+    const existing = this.bookingsById.get(input.id);
+    if (!existing) throw new Error(`No booking with id ${input.id}`);
+    const updated: Booking = { ...existing, start: input.start, end: input.end };
+    this.bookingsById.set(updated.id, updated);
+    return updated;
   }
   async getBusinessHours(_input: GetBusinessHoursInput): Promise<BusinessHours> {
     return {

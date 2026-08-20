@@ -12,10 +12,12 @@ import type {
   CreateBookingInput,
   EmbedInput,
   EmbedResult,
+  FindBookingByAppointmentIdInput,
   GetAvailabilityInput,
   GetBusinessHoursInput,
   TranscribeAudioInput,
   TranscribeAudioResult,
+  UpdateBookingInput,
   VisionAnalyzeInput,
   VisionAnalyzeResult,
 } from "@gracesoft-sentinel/core";
@@ -39,7 +41,13 @@ class FullyAvailableCalendarProvider implements CalendarProvider {
     return [{ start: input.from, end: input.to }];
   }
   async createBooking(input: CreateBookingInput): Promise<Booking> {
-    return { id: "booking-1", start: input.start, end: input.end };
+    return { id: "booking-1", appointmentId: input.appointmentId, start: input.start, end: input.end };
+  }
+  async findBookingByAppointmentId(_input: FindBookingByAppointmentIdInput): Promise<Booking | null> {
+    throw new Error("not expected to be called for this scenario");
+  }
+  async updateBooking(_input: UpdateBookingInput): Promise<Booking> {
+    throw new Error("not expected to be called for this scenario");
   }
   async getBusinessHours(_input: GetBusinessHoursInput): Promise<BusinessHours> {
     // Not called by this scenario — handleMessage reads business hours from

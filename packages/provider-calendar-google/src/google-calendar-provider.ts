@@ -4,11 +4,31 @@ import type {
   BusinessHours,
   CalendarProvider,
   CreateBookingInput,
+  FindBookingByAppointmentIdInput,
   GetAvailabilityInput,
   GetBusinessHoursInput,
+  UpdateBookingInput,
 } from "@gracesoft-sentinel/core";
 import { invertBusyToFree } from "./free-busy.js";
-import { createGoogleCalendarClient, type GoogleCalendarAuthConfig, type GoogleCalendarClient } from "./google-calendar-client.js";
+import { createGoogleCalendarClient, type GoogleCalendarAuthConfig, type GoogleCalendarClient, type GoogleCalendarEvent } from "./google-calendar-client.js";
+
+/** `extendedProperties.private.appointmentId` is the authoritative index — never parsed from `summary` text. */
+function toBooking(event: GoogleCalendarEvent, fallback: { start: string; end: string }): Booking {
+  if (!event.id) {
+    throw new Error("Google Calendar event is missing an id");
+  }
+  const appointmentId = event.extendedProperties?.private?.appointmentId;
+  if (!appointmentId) {
+    throw new Error(`Google Calendar event ${event.id} has no appointmentId in extendedProperties.private`);
+  }
+  return {
+    id: event.id,
+    appointmentId,
+    start: event.start?.dateTime ?? fallback.start,
+    end: event.end?.dateTime ?? fallback.end,
+    raw: event,
+  };
+}
 
 export interface GoogleCalendarProviderConfig {
   client: GoogleCalendarClient;
@@ -55,19 +75,37 @@ export class GoogleCalendarProvider implements CalendarProvider {
         start: { dateTime: input.start, timeZone: input.timezone },
         end: { dateTime: input.end, timeZone: input.timezone },
         attendees: attendeeEmail ? [{ email: attendeeEmail }] : undefined,
+        extendedProperties: { private: { appointmentId: input.appointmentId } },
       },
     });
 
-    if (!response.data.id) {
-      throw new Error("Google Calendar did not return an event id for the created booking");
-    }
+    return toBooking(response.data, { start: input.start, end: input.end });
+  }
 
-    return {
-      id: response.data.id,
-      start: response.data.start?.dateTime ?? input.start,
-      end: response.data.end?.dateTime ?? input.end,
-      raw: response.data,
-    };
+  async findBookingByAppointmentId(input: FindBookingByAppointmentIdInput): Promise<Booking | null> {
+    const response = await this.config.client.events.list({
+      calendarId: input.calendarId,
+      privateExtendedProperty: [`appointmentId=${input.appointmentId}`],
+      maxResults: 1,
+    });
+    const event = response.data.items?.[0];
+    if (!event) return null;
+    return toBooking(event, {
+      start: event.start?.dateTime ?? "",
+      end: event.end?.dateTime ?? "",
+    });
+  }
+
+  async updateBooking(input: UpdateBookingInput): Promise<Booking> {
+    const response = await this.config.client.events.patch({
+      calendarId: input.calendarId,
+      eventId: input.id,
+      requestBody: {
+        start: { dateTime: input.start, timeZone: input.timezone },
+        end: { dateTime: input.end, timeZone: input.timezone },
+      },
+    });
+    return toBooking(response.data, { start: input.start, end: input.end });
   }
 
   async getBusinessHours(_input: GetBusinessHoursInput): Promise<BusinessHours> {
