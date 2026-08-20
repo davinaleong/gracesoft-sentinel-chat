@@ -302,6 +302,58 @@ describe("handleMessage — regression: business-hours map excludes non-business
     const firstOffered = dayjs(context.bookingCandidates![0]!.start).tz("Asia/Singapore");
     expect(firstOffered.format("YYYY-MM-DD")).toBe("2026-05-04");
   });
+
+  it("rejecting all offered slots near closing time rolls to the next business day using the business's timezone, not the system's", async () => {
+    // Reproduces a real production bug: the rejection-reoffer path built its
+    // search start via a plain dayjs(iso) parse (no .tz()), whose field
+    // getters (.hour(), .startOf('day')) fall back to the *system*
+    // timezone rather than the business's — invisible on a machine whose
+    // local tz happens to already be Asia/Singapore, but very visible
+    // inside a Docker container defaulting to UTC (an 8h gap): "9am open"
+    // got computed as 9am UTC, which is 5pm in Singapore. Forcing TZ=UTC
+    // here makes the bug reproducible regardless of which machine runs
+    // this test.
+    const originalTz = process.env.TZ;
+    process.env.TZ = "UTC";
+    try {
+      // Friday 16:30 SGT — exactly 3 half-hour slots remain before the
+      // 18:00 close, so the *first* offer doesn't touch next-day rollover
+      // at all; only rejecting it does.
+      const nearClosing = dayjs.tz("2026-05-01T16:30:00", "Asia/Singapore").toDate();
+      const calendarProvider = fullyAvailableCalendarProvider();
+      const aiProvider = fakeAiProviderAnswering("unused");
+
+      const first = await handleMessage({
+        message: makeMessage({ text: "book something" }),
+        state: makeDisclosedState(),
+        businessConfig: TEST_BUSINESS_CONFIG,
+        calendarProvider,
+        aiProvider,
+        faqBlueprint: TEST_FAQ_BLUEPRINT,
+        now: nearClosing,
+      });
+      expect(first.response.quickReplies!.map((q) => q.label)).toEqual(["Fri, 1 May, 4:30pm", "Fri, 1 May, 5:00pm", "Fri, 1 May, 5:30pm"]);
+
+      const second = await handleMessage({
+        message: makeMessage({ text: "none of those work for me" }),
+        state: first.state,
+        businessConfig: TEST_BUSINESS_CONFIG,
+        calendarProvider,
+        aiProvider,
+        faqBlueprint: TEST_FAQ_BLUEPRINT,
+        now: nearClosing,
+      });
+
+      // Rolls all the way to Monday, not Saturday: 2 May is the same
+      // holiday exception this describe block is named for, and Sunday is
+      // closed per the weekly map — so 4 May 09:00 SGT is the correct next
+      // opening. The buggy version offered "5:00pm" here instead (09:00
+      // misread as UTC).
+      expect(second.response.quickReplies!.map((q) => q.label)).toEqual(["Mon, 4 May, 9:00am", "Mon, 4 May, 9:30am", "Mon, 4 May, 10:00am"]);
+    } finally {
+      process.env.TZ = originalTz;
+    }
+  });
 });
 
 describe("handleMessage — timezone & formatting consistency", () => {

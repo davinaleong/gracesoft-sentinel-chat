@@ -27,7 +27,7 @@ import {
 import type { FaqGroundingBlueprint } from "./faq-matcher.js";
 import { answerFaq } from "./faq-matcher.js";
 import { DEFAULT_SLOT_DURATION_MINUTES, findNextAvailableSlots, isSlotAvailable } from "./slot-engine.js";
-import { businessNow, dayjs } from "./time.js";
+import { businessNow, dayjs, inBusinessTz } from "./time.js";
 
 export interface ConciergeHandleMessageInput {
   message: NormalizedMessage;
@@ -201,7 +201,20 @@ async function handlePendingSelection(params: {
       calendarId: params.businessConfig.calendarId,
       businessHours: params.businessConfig.businessHours,
       timezone: params.businessConfig.timezone,
-      from: dayjs(lastCandidate.end),
+      // Business-timezone-aware, not a plain dayjs(iso) parse — the latter's
+      // field getters (.hour(), .startOf('day')) fall back to the *system*
+      // timezone (whatever the deployment host/container happens to be,
+      // e.g. UTC), not the business's. When candidate generation needs to
+      // roll into a following day, that mismatch silently offsets "9am
+      // open" by the gap between the two zones (8h for Asia/Singapore vs.
+      // UTC) rather than raising an error, so it's easy to miss without a
+      // regression test pinned to a non-UTC business timezone.
+      //
+      // inBusinessTz (dayjs(iso).tz(zone)), not dayjs.tz(iso, zone): the
+      // latter's *string* form parses iso's wall-clock digits as already
+      // being in `zone`, ignoring its embedded offset entirely — it's for
+      // parsing a naive local time, not re-viewing an existing instant.
+      from: inBusinessTz(lastCandidate.end, params.businessConfig.timezone),
     });
     if (slots.length === 0) {
       return {
