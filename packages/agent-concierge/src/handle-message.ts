@@ -350,6 +350,24 @@ function looksLikeRescheduleRequest(text: string): boolean {
   return RESCHEDULE_INTENT_PATTERN.test(text);
 }
 
+const RESET_PATTERN = /^\s*\/start\b|^\s*(hi|hello|hey)\b|\b(cancel|never ?mind|forget it|start over)\b/i;
+
+/**
+ * Whether `text` looks like the chatter has moved on to something else,
+ * rather than answering what we last asked them (their appointment id, or
+ * yes/no to a suggested one). Without this, "awaiting appointment id" had
+ * no way out: every later message — including /start or a brand new
+ * booking request — got swallowed as a failed id lookup, trapping the
+ * conversation until a valid id finally showed up.
+ */
+function looksLikeFreshTopic(text: string, now: Dayjs): boolean {
+  if (!text) return false;
+  if (RESET_PATTERN.test(text)) return true;
+  if (looksLikeRescheduleRequest(text)) return true;
+  const parsed = parseBookingRequest(text, now);
+  return parsed.hasBookingIntent || parsed.date !== undefined || parsed.time !== undefined;
+}
+
 /** Offers 3 new slots for an already-located booking; the current slot is never among them since the calendar itself already shows it as busy. */
 async function offerRescheduleSlots(params: {
   booking: Booking;
@@ -358,12 +376,20 @@ async function offerRescheduleSlots(params: {
   state: ConversationState;
   now: Dayjs;
 }): Promise<ConciergeHandleMessageResult> {
+  // Search from whichever is later: right now, or the booking's own
+  // current start. "Now" alone isn't enough — a booking made for next
+  // week, rescheduled today, would otherwise get offered slots *earlier*
+  // than the one already booked (still genuinely future, just not what
+  // "change my appointment" means: moving it, not stepping backwards).
+  const bookingStart = inBusinessTz(params.booking.start, params.businessConfig.timezone);
+  const searchFrom = bookingStart.isAfter(params.now) ? bookingStart : params.now;
+
   const slots = await findNextAvailableSlots({
     calendarProvider: params.calendarProvider,
     calendarId: params.businessConfig.calendarId,
     businessHours: params.businessConfig.businessHours,
     timezone: params.businessConfig.timezone,
-    from: params.now,
+    from: searchFrom,
   });
   if (slots.length === 0) {
     return {
@@ -537,26 +563,37 @@ async function handleMessageInner(input: ConciergeHandleMessageInput): Promise<C
   }
 
   const now = businessNow(businessConfig.timezone, input.now);
-  const context = (input.state.context ?? {}) as ConciergeContext;
+  const text = message.text ?? "";
+
+  let state = input.state;
+  let context = (state.context ?? {}) as ConciergeContext;
+
+  // Escape hatch: don't trap the chatter forever in "awaiting your
+  // appointment id" / "is that the one?" once they've clearly moved on to
+  // something else. Clearing here (rather than deeper in
+  // handleReschedulePreOffer) means the rest of this turn's dispatch below
+  // sees a clean context and processes the message normally.
+  if ((context.awaitingAppointmentId || context.pendingRescheduleConfirmationId) && looksLikeFreshTopic(text, now)) {
+    state = withContext(state, { awaitingAppointmentId: undefined, pendingRescheduleConfirmationId: undefined });
+    context = state.context as ConciergeContext;
+  }
 
   const pendingSelectionResult = await handlePendingSelection({
     context,
     message,
     businessConfig,
     calendarProvider,
-    state: input.state,
+    state,
     now,
   });
   if (pendingSelectionResult) return pendingSelectionResult;
-
-  const text = message.text ?? "";
 
   const rescheduleResult = await handleReschedulePreOffer({
     context,
     text,
     businessConfig,
     calendarProvider,
-    state: input.state,
+    state,
     now,
   });
   if (rescheduleResult) return rescheduleResult;
@@ -570,16 +607,16 @@ async function handleMessageInner(input: ConciergeHandleMessageInput): Promise<C
       message,
       businessConfig,
       calendarProvider,
-      state: input.state,
+      state,
       now,
     });
   }
 
   const answer = await answerFaq(text, faqBlueprint, aiProvider);
   if (answer.escalate) {
-    return escalate(input.state, message, answer.text);
+    return escalate(state, message, answer.text);
   }
-  return { response: { text: answer.text }, state: withContext(input.state, {}) };
+  return { response: { text: answer.text }, state: withContext(state, {}) };
 }
 
 /**

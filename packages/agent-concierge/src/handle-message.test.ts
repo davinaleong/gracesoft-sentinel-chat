@@ -764,6 +764,17 @@ describe("handleMessage — rescheduling", () => {
     // The moment the booking is being rescheduled, not one of the new candidates.
     expect(offer.response.quickReplies!.map((q) => q.label)).not.toContain(formatSlotLabel("2026-05-04T11:00:00+08:00", "Asia/Singapore"));
 
+    // Regression: offering must search from the booking's own start, not
+    // just "now" — the original booking (4 May 11am) is itself in the
+    // future relative to `now` (1 May), so searching from `now` alone
+    // offered slots *earlier* than the booking being rescheduled (still
+    // technically future, but a step backwards, not a reschedule forward).
+    const context = offer.state.context as ConciergeContext;
+    const bookingStart = new Date("2026-05-04T11:00:00+08:00").getTime();
+    for (const candidate of context.bookingCandidates!) {
+      expect(new Date(candidate.start).getTime()).toBeGreaterThan(bookingStart);
+    }
+
     const moved = await handleMessage({
       message: makeMessage({ quickReplyId: "slot-1" }),
       state: offer.state,
@@ -848,6 +859,77 @@ describe("handleMessage — rescheduling", () => {
     });
     expect(result.response.text).toMatch(/couldn't find a booking/i);
     expect((result.state.context as ConciergeContext).awaitingAppointmentId).toBe(true);
+  });
+
+  it("regression: doesn't trap the chatter forever once they've moved on from an unanswered 'what's your appointment id?'", async () => {
+    // Provoke the awaiting-id state without a valid id available to escape it with.
+    const first = await handleMessage({
+      message: makeMessage({ text: "I want to reschedule my appointment" }),
+      state: makeDisclosedState(),
+      businessConfig: TEST_BUSINESS_CONFIG,
+      calendarProvider: fullyAvailableCalendarProvider(),
+      aiProvider: fakeAiProviderAnswering("unused"),
+      faqBlueprint: TEST_FAQ_BLUEPRINT,
+      now: NOW,
+    });
+    expect((first.state.context as ConciergeContext).awaitingAppointmentId).toBe(true);
+
+    // /start used to get swallowed as a failed id lookup attempt instead of
+    // being treated as a fresh turn.
+    const afterStart = await handleMessage({
+      message: makeMessage({ text: "/start" }),
+      state: first.state,
+      businessConfig: TEST_BUSINESS_CONFIG,
+      calendarProvider: fullyAvailableCalendarProvider(),
+      aiProvider: fakeAiProviderAnswering("unused"),
+      faqBlueprint: TEST_FAQ_BLUEPRINT,
+      now: NOW,
+    });
+    expect(afterStart.response.text).not.toMatch(/couldn't find a booking/i);
+    expect((afterStart.state.context as ConciergeContext).awaitingAppointmentId).toBeUndefined();
+
+    // A brand new booking request should also escape the trap and actually
+    // start a fresh booking, not be swallowed as another failed id lookup.
+    const afterNewRequest = await handleMessage({
+      message: makeMessage({ text: "i want to make an appointment" }),
+      state: first.state,
+      businessConfig: TEST_BUSINESS_CONFIG,
+      calendarProvider: fullyAvailableCalendarProvider(),
+      aiProvider: fakeAiProviderAnswering("unused"),
+      faqBlueprint: TEST_FAQ_BLUEPRINT,
+      now: NOW,
+    });
+    expect(afterNewRequest.response.text).not.toMatch(/couldn't find a booking/i);
+    expect(afterNewRequest.response.quickReplies).toHaveLength(3);
+  });
+
+  it("regression: an explicit 'cancel' also escapes the awaiting-confirmation trap", async () => {
+    const calendarProvider = fullyAvailableCalendarProvider();
+    const aiProvider = fakeAiProviderAnswering("unused");
+    const { state: afterBooking } = await bookInitialAppointment(calendarProvider);
+
+    const suggestion = await handleMessage({
+      message: makeMessage({ text: "I want to reschedule my appointment" }),
+      state: afterBooking,
+      businessConfig: TEST_BUSINESS_CONFIG,
+      calendarProvider,
+      aiProvider,
+      faqBlueprint: TEST_FAQ_BLUEPRINT,
+      now: NOW,
+    });
+    expect((suggestion.state.context as ConciergeContext).pendingRescheduleConfirmationId).toBeDefined();
+
+    const cancelled = await handleMessage({
+      message: makeMessage({ text: "never mind, forget it" }),
+      state: suggestion.state,
+      businessConfig: TEST_BUSINESS_CONFIG,
+      calendarProvider,
+      aiProvider,
+      faqBlueprint: TEST_FAQ_BLUEPRINT,
+      now: NOW,
+    });
+    expect((cancelled.state.context as ConciergeContext).pendingRescheduleConfirmationId).toBeUndefined();
+    expect((cancelled.state.context as ConciergeContext).awaitingAppointmentId).toBeUndefined();
   });
 
   it("rejecting the offered reschedule slots offers a fresh batch for the same booking, not a duplicate", async () => {
