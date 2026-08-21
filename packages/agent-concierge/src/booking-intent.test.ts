@@ -14,6 +14,10 @@ describe("parseBookingRequest — intent detection", () => {
   it("does not detect booking intent in unrelated text", () => {
     expect(parseBookingRequest("Do you sell coffee?", NOW).hasBookingIntent).toBe(false);
   });
+
+  it("regression: recognizes 'appt', the common abbreviation for appointment", () => {
+    expect(parseBookingRequest("hi, can i make appt?", NOW).hasBookingIntent).toBe(true);
+  });
 });
 
 describe("parseBookingRequest — relative dates", () => {
@@ -49,6 +53,22 @@ describe("parseBookingRequest — explicit dates", () => {
   it("rolls a past-this-year explicit date to next year", () => {
     // NOW is 1 May 2026; "3 Jan" has already passed this year.
     expect(parseBookingRequest("book for 3 Jan", NOW).date).toBe("2027-01-03");
+  });
+
+  it("honors an explicit year in 'day month year' form, even when it's further out than the roll-forward default", () => {
+    expect(parseBookingRequest("book for 4 Jan 2028", NOW).date).toBe("2028-01-04");
+  });
+
+  it("honors an explicit year in 'month day year' form", () => {
+    expect(parseBookingRequest("book for Jan 4, 2028", NOW).date).toBe("2028-01-04");
+  });
+
+  it("does not roll an explicit year forward, even if that date has already passed", () => {
+    // NOW is 1 May 2026; 3 Jan 2026 is in the past, but an explicit year
+    // must be taken literally rather than inferred — the caller (or the
+    // downstream availability check) is responsible for handling a stale
+    // date, not this parser silently correcting it.
+    expect(parseBookingRequest("book for 3 Jan 2026", NOW).date).toBe("2026-01-03");
   });
 });
 

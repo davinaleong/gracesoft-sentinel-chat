@@ -49,7 +49,8 @@ function offerSlotsResponse(
   slots: { start: string; end: string }[],
   timezone: string,
   state: ConversationState,
-  promptText: string
+  promptText: string,
+  extraContext: Partial<ConciergeContext> = {}
 ): ConciergeHandleMessageResult {
   const candidates = toBookingCandidates(slots);
   return {
@@ -57,15 +58,52 @@ function offerSlotsResponse(
       text: promptText,
       quickReplies: candidates.map((c) => ({ id: c.id, label: formatSlotLabel(c.start, timezone) })),
     },
-    state: withContext(state, { bookingCandidates: candidates }),
+    state: withContext(state, { bookingCandidates: candidates, ...extraContext }),
   };
 }
+
+/**
+ * Every call site inside handleBookingRequest offers slots for a brand new
+ * booking, never a continuation of a reschedule — reschedulingBookingId
+ * must be explicitly cleared here, not just left to withContext's merge,
+ * or a chatter who abandoned an earlier reschedule offer (candidates shown
+ * but never picked, then asked for a completely new booking instead) would
+ * have their new candidate list corrupted by a stale marker: picking one
+ * would silently move the old booking rather than creating a new one.
+ */
+const CLEAR_RESCHEDULE_CONTEXT: Partial<ConciergeContext> = { reschedulingBookingId: undefined };
 
 const BOOKING_FAILED_MESSAGE =
   "Sorry, I couldn't complete that booking right now — please try again in a moment, or let us know if it keeps happening.";
 const DAILY_LIMIT_MESSAGE =
   "You've reached today's booking limit for new appointments — please contact us directly if this is urgent, or try again tomorrow.";
 const NO_BOOKING_FOUND_MESSAGE = "I couldn't find a booking with that appointment ID — could you double-check it?";
+
+/**
+ * The last instant a booking or reschedule may land on, per the business's
+ * own `maxBookingHorizonDays` policy. `undefined` when the business hasn't
+ * set one — i.e. no cap beyond the slot engine's own default search
+ * horizon (`DEFAULT_HORIZON_DAYS`).
+ */
+function maxAdvanceBookingDate(businessConfig: BusinessConfig, now: Dayjs): Dayjs | undefined {
+  return businessConfig.maxBookingHorizonDays === undefined
+    ? undefined
+    : now.add(businessConfig.maxBookingHorizonDays, "day").endOf("day");
+}
+
+/**
+ * Shrinks the slot engine's search horizon so a capped business never has
+ * slots suggested past its own `maxBookingHorizonDays`, regardless of
+ * where the search starts from. `undefined` (no cap set) lets
+ * `findNextAvailableSlots` fall back to its own `DEFAULT_HORIZON_DAYS`.
+ */
+function boundedHorizonDays(maxDate: Dayjs | undefined, from: Dayjs): number | undefined {
+  return maxDate ? Math.max(maxDate.diff(from.startOf("day"), "day"), 0) : undefined;
+}
+
+function tooFarAheadMessage(maxDate: Dayjs): string {
+  return `We're only able to book appointments up to ${maxDate.format("ddd, D MMM")} in advance — could you pick an earlier date?`;
+}
 
 /** Creates a brand-new booking: generates its appointment id, enforces the daily cap, and reports both back to the chatter. */
 async function createNewBooking(params: {
@@ -79,7 +117,7 @@ async function createNewBooking(params: {
 }): Promise<ConciergeHandleMessageResult> {
   const context = (params.state.context ?? {}) as ConciergeContext;
   if (bookingsMadeToday(context, params.now) >= DAILY_BOOKING_LIMIT) {
-    return { response: { text: DAILY_LIMIT_MESSAGE }, state: withContext(params.state, { bookingCandidates: undefined }) };
+    return { response: { text: DAILY_LIMIT_MESSAGE }, state: withContext(params.state, { bookingCandidates: undefined, ...CLEAR_RESCHEDULE_CONTEXT }) };
   }
 
   const appointmentId = generateAppointmentId();
@@ -99,7 +137,7 @@ async function createNewBooking(params: {
     // silent failure — the ack already happened at the channel layer, so
     // without this the chatter would simply get no response at all.
     console.error("[agent-concierge] createBooking failed:", err);
-    return { response: { text: BOOKING_FAILED_MESSAGE }, state: withContext(params.state, { bookingCandidates: undefined }) };
+    return { response: { text: BOOKING_FAILED_MESSAGE }, state: withContext(params.state, { bookingCandidates: undefined, ...CLEAR_RESCHEDULE_CONTEXT }) };
   }
 
   const label = formatSlotLabel(booking.start, params.businessConfig.timezone);
@@ -111,6 +149,7 @@ async function createNewBooking(params: {
       bookingCandidates: undefined,
       lastAppointmentId: booking.appointmentId,
       bookingsToday: incrementBookingsToday(context, params.now),
+      ...CLEAR_RESCHEDULE_CONTEXT,
     }),
   };
 }
@@ -215,6 +254,10 @@ async function handlePendingSelection(params: {
       // being in `zone`, ignoring its embedded offset entirely — it's for
       // parsing a naive local time, not re-viewing an existing instant.
       from: inBusinessTz(lastCandidate.end, params.businessConfig.timezone),
+      horizonDays: boundedHorizonDays(
+        maxAdvanceBookingDate(params.businessConfig, params.now),
+        inBusinessTz(lastCandidate.end, params.businessConfig.timezone)
+      ),
     });
     if (slots.length === 0) {
       return {
@@ -239,6 +282,15 @@ async function handleBookingRequest(params: {
   const { businessConfig, calendarProvider, state, now } = params;
   const parsed = parseBookingRequest(params.text, now);
   const businessHours = businessConfig.businessHours;
+  const maxDate = maxAdvanceBookingDate(businessConfig, now);
+
+  // An explicit date beyond the business's own cap is a dead end no matter
+  // whether a time was also given — check it once, up front, rather than
+  // duplicating the same guard in both the date+time and date-only branches
+  // below (and running a search that could only ever come back empty).
+  if (parsed.date && maxDate && dayjs.tz(parsed.date, businessConfig.timezone).isAfter(maxDate)) {
+    return { response: { text: tooFarAheadMessage(maxDate) }, state: withContext(state, CLEAR_RESCHEDULE_CONTEXT) };
+  }
 
   if (parsed.date && parsed.time) {
     const start = dayjs.tz(`${parsed.date} ${parsed.time}`, businessConfig.timezone);
@@ -267,8 +319,9 @@ async function handleBookingRequest(params: {
       businessHours,
       timezone: businessConfig.timezone,
       from: start,
+      horizonDays: boundedHorizonDays(maxDate, start),
     });
-    return offerSlotsResponse(slots, businessConfig.timezone, state, "That slot isn't available. Here are the next options:");
+    return offerSlotsResponse(slots, businessConfig.timezone, state, "That slot isn't available. Here are the next options:", CLEAR_RESCHEDULE_CONTEXT);
   }
 
   if (parsed.date && !parsed.time) {
@@ -279,8 +332,9 @@ async function handleBookingRequest(params: {
       businessHours,
       timezone: businessConfig.timezone,
       from,
+      horizonDays: boundedHorizonDays(maxDate, from),
     });
-    return offerSlotsResponse(slots, businessConfig.timezone, state, "Here are the next available slots on or after that date:");
+    return offerSlotsResponse(slots, businessConfig.timezone, state, "Here are the next available slots on or after that date:", CLEAR_RESCHEDULE_CONTEXT);
   }
 
   if (!parsed.date && parsed.time) {
@@ -316,8 +370,9 @@ async function handleBookingRequest(params: {
         businessHours,
         timezone: businessConfig.timezone,
         from: now,
+        horizonDays: boundedHorizonDays(maxDate, now),
       });
-      return offerSlotsResponse(slots, businessConfig.timezone, state, "That time isn't available today. Here are the next options:");
+      return offerSlotsResponse(slots, businessConfig.timezone, state, "That time isn't available today. Here are the next options:", CLEAR_RESCHEDULE_CONTEXT);
     }
 
     // Outside office hours (or today is closed) — no same-day assumption,
@@ -329,8 +384,9 @@ async function handleBookingRequest(params: {
       businessHours,
       timezone: businessConfig.timezone,
       from,
+      horizonDays: boundedHorizonDays(maxDate, from),
     });
-    return offerSlotsResponse(slots, businessConfig.timezone, state, "That's outside our hours. Here are the next available slots:");
+    return offerSlotsResponse(slots, businessConfig.timezone, state, "That's outside our hours. Here are the next available slots:", CLEAR_RESCHEDULE_CONTEXT);
   }
 
   const slots = await findNextAvailableSlots({
@@ -339,12 +395,16 @@ async function handleBookingRequest(params: {
     businessHours,
     timezone: businessConfig.timezone,
     from: now,
+    horizonDays: boundedHorizonDays(maxDate, now),
   });
-  return offerSlotsResponse(slots, businessConfig.timezone, state, "Here are the next available slots:");
+  return offerSlotsResponse(slots, businessConfig.timezone, state, "Here are the next available slots:", CLEAR_RESCHEDULE_CONTEXT);
 }
 
+// "my" is optional throughout — "change appointment" (no possessive) is at
+// least as natural as "change my appointment", especially in Singlish
+// phrasing, which tends to drop possessives/subjects entirely.
 const RESCHEDULE_INTENT_PATTERN =
-  /\b(reschedul\w*|change my (?:appointment|booking)|move my (?:appointment|booking)|different time for my (?:appointment|booking)|change (?:the )?time of my (?:appointment|booking))\b/i;
+  /\b(reschedul\w*|(?:change|move|shift|postpone) (?:my )?(?:appointment|appt|booking)|different time for (?:my )?(?:appointment|appt|booking)|change (?:the )?time of (?:my )?(?:appointment|appt|booking))\b/i;
 
 function looksLikeRescheduleRequest(text: string): boolean {
   return RESCHEDULE_INTENT_PATTERN.test(text);
@@ -364,32 +424,29 @@ function looksLikeFreshTopic(text: string, now: Dayjs): boolean {
   if (!text) return false;
   if (RESET_PATTERN.test(text)) return true;
   if (looksLikeRescheduleRequest(text)) return true;
+  if (looksLikeCancelRequest(text)) return true;
   const parsed = parseBookingRequest(text, now);
   return parsed.hasBookingIntent || parsed.date !== undefined || parsed.time !== undefined;
 }
 
 /** Offers 3 new slots for an already-located booking; the current slot is never among them since the calendar itself already shows it as busy. */
-async function offerRescheduleSlots(params: {
+/** Runs a slot search and turns it into either "no openings" or a candidate-picker response — the tail shared by every path through `offerRescheduleSlots`. */
+async function offerRescheduleCandidates(params: {
   booking: Booking;
   businessConfig: BusinessConfig;
   calendarProvider: CalendarProvider;
   state: ConversationState;
-  now: Dayjs;
+  from: Dayjs;
+  maxDate: Dayjs | undefined;
+  promptText: string;
 }): Promise<ConciergeHandleMessageResult> {
-  // Search from whichever is later: right now, or the booking's own
-  // current start. "Now" alone isn't enough — a booking made for next
-  // week, rescheduled today, would otherwise get offered slots *earlier*
-  // than the one already booked (still genuinely future, just not what
-  // "change my appointment" means: moving it, not stepping backwards).
-  const bookingStart = inBusinessTz(params.booking.start, params.businessConfig.timezone);
-  const searchFrom = bookingStart.isAfter(params.now) ? bookingStart : params.now;
-
   const slots = await findNextAvailableSlots({
     calendarProvider: params.calendarProvider,
     calendarId: params.businessConfig.calendarId,
     businessHours: params.businessConfig.businessHours,
     timezone: params.businessConfig.timezone,
-    from: searchFrom,
+    from: params.from,
+    horizonDays: boundedHorizonDays(params.maxDate, params.from),
   });
   if (slots.length === 0) {
     return {
@@ -401,7 +458,7 @@ async function offerRescheduleSlots(params: {
   const candidates = toBookingCandidates(slots);
   return {
     response: {
-      text: `Sure — here are some other times for ${params.booking.appointmentId}:`,
+      text: params.promptText,
       quickReplies: candidates.map((c) => ({ id: c.id, label: formatSlotLabel(c.start, params.businessConfig.timezone) })),
     },
     state: withContext(params.state, {
@@ -414,12 +471,100 @@ async function offerRescheduleSlots(params: {
   };
 }
 
+/**
+ * Offers new times for an already-located booking. When the chatter named
+ * a specific date/time ("...to next Tuesday", "...to 3pm on the 26th"),
+ * that's honored as the search anchor — or, if date+time together land on
+ * an actually-free slot, the booking is moved there directly, the same
+ * "auto-book an exact available slot" shortcut `handleBookingRequest` uses
+ * for a fresh booking. With no date/time mentioned, falls back to the
+ * previous default: whichever is later, right now or the booking's own
+ * current start (never offered *earlier* than what's already booked).
+ */
+async function offerRescheduleSlots(params: {
+  booking: Booking;
+  businessConfig: BusinessConfig;
+  calendarProvider: CalendarProvider;
+  state: ConversationState;
+  now: Dayjs;
+  requestedDate?: string;
+  requestedTime?: string;
+}): Promise<ConciergeHandleMessageResult> {
+  const { businessConfig, calendarProvider, state, now, booking, requestedDate, requestedTime } = params;
+  const businessHours = businessConfig.businessHours;
+  const maxDate = maxAdvanceBookingDate(businessConfig, now);
+
+  if (requestedDate && maxDate && dayjs.tz(requestedDate, businessConfig.timezone).isAfter(maxDate)) {
+    return {
+      response: { text: tooFarAheadMessage(maxDate) },
+      state: withContext(state, { awaitingAppointmentId: undefined, pendingRescheduleConfirmationId: undefined }),
+    };
+  }
+
+  if (requestedDate && requestedTime) {
+    const start = dayjs.tz(`${requestedDate} ${requestedTime}`, businessConfig.timezone);
+    const end = start.add(DEFAULT_SLOT_DURATION_MINUTES, "minute");
+    const dayHours = resolveDayHours(businessHours, start);
+    const available =
+      !start.isBefore(now) && dayHours !== null && isWithinHours(start, dayHours)
+        ? await isSlotAvailable({ calendarProvider, calendarId: businessConfig.calendarId, start, end, timezone: businessConfig.timezone })
+        : false;
+
+    if (available) {
+      return moveExistingBooking({
+        calendarProvider,
+        businessConfig,
+        bookingId: booking.id,
+        start: start.toISOString(),
+        end: end.toISOString(),
+        state,
+      });
+    }
+
+    return offerRescheduleCandidates({
+      booking,
+      businessConfig,
+      calendarProvider,
+      state,
+      from: start.isBefore(now) ? now : start,
+      maxDate,
+      promptText: "That slot isn't available. Here are the next options:",
+    });
+  }
+
+  let from: Dayjs;
+  if (requestedDate) {
+    const requested = dayjs.tz(requestedDate, businessConfig.timezone).startOf("day");
+    from = requested.isBefore(now) ? now : requested;
+  } else {
+    // Search from whichever is later: right now, or the booking's own
+    // current start. "Now" alone isn't enough — a booking made for next
+    // week, rescheduled today, would otherwise get offered slots *earlier*
+    // than the one already booked (still genuinely future, just not what
+    // "change my appointment" means: moving it, not stepping backwards).
+    const bookingStart = inBusinessTz(booking.start, businessConfig.timezone);
+    from = bookingStart.isAfter(now) ? bookingStart : now;
+  }
+
+  return offerRescheduleCandidates({
+    booking,
+    businessConfig,
+    calendarProvider,
+    state,
+    from,
+    maxDate,
+    promptText: `Sure — here are some other times for ${booking.appointmentId}:`,
+  });
+}
+
 async function lookupAndOfferReschedule(params: {
   appointmentId: string;
   businessConfig: BusinessConfig;
   calendarProvider: CalendarProvider;
   state: ConversationState;
   now: Dayjs;
+  requestedDate?: string;
+  requestedTime?: string;
 }): Promise<ConciergeHandleMessageResult> {
   const booking = await params.calendarProvider.findBookingByAppointmentId({
     calendarId: params.businessConfig.calendarId,
@@ -437,6 +582,8 @@ async function lookupAndOfferReschedule(params: {
     calendarProvider: params.calendarProvider,
     state: params.state,
     now: params.now,
+    requestedDate: params.requestedDate,
+    requestedTime: params.requestedTime,
   });
 }
 
@@ -462,20 +609,25 @@ async function handleReschedulePreOffer(params: {
   now: Dayjs;
 }): Promise<ConciergeHandleMessageResult | undefined> {
   const { context, text, businessConfig, calendarProvider, state, now } = params;
+  // Parsed once and threaded through every path below that resolves an
+  // appointment id, so "change appointment GS-XXXX-XXXX to next Tuesday"
+  // (id and date in the same message) honors the requested date instead of
+  // always defaulting to the soonest opening.
+  const { date: requestedDate, time: requestedTime } = parseBookingRequest(text, now);
 
   if (context.awaitingAppointmentId) {
     const appointmentId = extractAppointmentId(text) ?? text.trim().toUpperCase();
-    return lookupAndOfferReschedule({ appointmentId, businessConfig, calendarProvider, state, now });
+    return lookupAndOfferReschedule({ appointmentId, businessConfig, calendarProvider, state, now, requestedDate, requestedTime });
   }
 
   if (context.pendingRescheduleConfirmationId) {
     const suggested = context.pendingRescheduleConfirmationId;
     const typedId = extractAppointmentId(text);
     if (typedId) {
-      return lookupAndOfferReschedule({ appointmentId: typedId, businessConfig, calendarProvider, state, now });
+      return lookupAndOfferReschedule({ appointmentId: typedId, businessConfig, calendarProvider, state, now, requestedDate, requestedTime });
     }
     if (isAffirmative(text)) {
-      return lookupAndOfferReschedule({ appointmentId: suggested, businessConfig, calendarProvider, state, now });
+      return lookupAndOfferReschedule({ appointmentId: suggested, businessConfig, calendarProvider, state, now, requestedDate, requestedTime });
     }
     if (isNegative(text)) {
       return {
@@ -493,7 +645,7 @@ async function handleReschedulePreOffer(params: {
 
   const typedId = extractAppointmentId(text);
   if (typedId) {
-    return lookupAndOfferReschedule({ appointmentId: typedId, businessConfig, calendarProvider, state, now });
+    return lookupAndOfferReschedule({ appointmentId: typedId, businessConfig, calendarProvider, state, now, requestedDate, requestedTime });
   }
 
   if (context.lastAppointmentId) {
@@ -506,6 +658,180 @@ async function handleReschedulePreOffer(params: {
   return {
     response: { text: "Sure — what's your appointment ID? You'll find it in your original booking confirmation." },
     state: withContext(state, { awaitingAppointmentId: true }),
+  };
+}
+
+const CANCEL_APPOINTMENT_INTENT_PATTERN = /\b(cancel|call off) (?:my |the )?(?:appointment|appt|booking)\b/i;
+
+function looksLikeCancelRequest(text: string): boolean {
+  return CANCEL_APPOINTMENT_INTENT_PATTERN.test(text);
+}
+
+const CANCEL_FAILED_MESSAGE =
+  "Sorry, I couldn't cancel that booking right now — please try again in a moment, or let us know if it keeps happening.";
+
+/**
+ * The word "cancel" is genuinely ambiguous across this codebase: as a
+ * bare reset keyword (see RESET_PATTERN) it means "drop what we were
+ * doing", but as a reply to "cancel your appointment? yes/no" it
+ * unambiguously means "yes, do it" — the same word, opposite meaning,
+ * disambiguated entirely by which question is currently pending. This
+ * check exists only for that second, narrower context.
+ */
+function confirmsCancellation(text: string): boolean {
+  return isAffirmative(text) || /\bcancel\b/i.test(text);
+}
+
+function abortsCancellation(text: string): boolean {
+  return isNegative(text) || /\b(keep it|keep my appointment|don'?t cancel)\b/i.test(text);
+}
+
+// Same idea as RESET_PATTERN, minus the bare "cancel" keyword: escaping the
+// pendingCancelBookingId gate (see handleMessageInner) must never trigger
+// on the word "cancel" itself, since that's exactly what confirms the
+// cancellation there — only used once confirmsCancellation/abortsCancellation
+// have both already failed to match, so nothing containing "cancel" ever
+// reaches this check in practice.
+const RESET_PATTERN_WITHOUT_CANCEL = /^\s*\/start\b|^\s*(hi|hello|hey)\b|\b(never ?mind|forget it|start over)\b/i;
+
+function looksLikeFreshTopicExcludingBareCancel(text: string, now: Dayjs): boolean {
+  if (!text) return false;
+  if (RESET_PATTERN_WITHOUT_CANCEL.test(text)) return true;
+  if (looksLikeRescheduleRequest(text)) return true;
+  const parsed = parseBookingRequest(text, now);
+  return parsed.hasBookingIntent || parsed.date !== undefined || parsed.time !== undefined;
+}
+
+async function askCancelConfirmation(params: {
+  booking: Booking;
+  businessConfig: BusinessConfig;
+  state: ConversationState;
+}): Promise<ConciergeHandleMessageResult> {
+  const label = formatSlotLabel(params.booking.start, params.businessConfig.timezone);
+  return {
+    response: {
+      text: `Just to confirm — cancel your appointment ${params.booking.appointmentId} (${label})? This can't be undone. Reply yes to confirm, or no to keep it.`,
+    },
+    state: withContext(params.state, {
+      pendingCancelBookingId: params.booking.id,
+      lastAppointmentId: params.booking.appointmentId,
+      awaitingCancelAppointmentId: undefined,
+      pendingCancelConfirmationId: undefined,
+    }),
+  };
+}
+
+async function lookupAndAskCancelConfirmation(params: {
+  appointmentId: string;
+  businessConfig: BusinessConfig;
+  calendarProvider: CalendarProvider;
+  state: ConversationState;
+}): Promise<ConciergeHandleMessageResult> {
+  const booking = await params.calendarProvider.findBookingByAppointmentId({
+    calendarId: params.businessConfig.calendarId,
+    appointmentId: params.appointmentId,
+  });
+  if (!booking) {
+    return {
+      response: { text: NO_BOOKING_FOUND_MESSAGE },
+      state: withContext(params.state, { awaitingCancelAppointmentId: true, pendingCancelConfirmationId: undefined }),
+    };
+  }
+  return askCancelConfirmation({ booking, businessConfig: params.businessConfig, state: params.state });
+}
+
+/**
+ * Mirrors handleReschedulePreOffer's shape, plus one extra step: an
+ * explicit "are you sure?" before the irreversible delete happens.
+ * Reschedule doesn't need this (moving a booking is trivially undoable —
+ * just move it again); cancellation isn't undoable at all, so the extra
+ * confirmation earns its keep here specifically.
+ *
+ * `pendingCancelBookingId` is deliberately *not* covered by
+ * `looksLikeFreshTopic`'s escape hatch (see handleMessageInner) — a bare
+ * "cancel" reply to *this* question means "yes", not "let's talk about
+ * something else", so this step needs full, uninterrupted control over
+ * how its own yes/no is interpreted.
+ */
+async function handleCancelPreOffer(params: {
+  context: ConciergeContext;
+  text: string;
+  businessConfig: BusinessConfig;
+  calendarProvider: CalendarProvider;
+  state: ConversationState;
+}): Promise<ConciergeHandleMessageResult | undefined> {
+  const { context, text, businessConfig, calendarProvider, state } = params;
+
+  if (context.pendingCancelBookingId) {
+    // Abort is checked before confirm, deliberately: a false "confirm"
+    // permanently deletes a booking, a false "abort" just means asking
+    // again — so on any ambiguity this must fail toward the safer outcome.
+    // This is also what makes "don't cancel" safe despite containing the
+    // literal word "cancel" (which confirmsCancellation alone would match).
+    if (abortsCancellation(text)) {
+      return {
+        response: { text: "No problem — your appointment is still booked." },
+        state: withContext(state, { pendingCancelBookingId: undefined }),
+      };
+    }
+    if (confirmsCancellation(text)) {
+      try {
+        await calendarProvider.cancelBooking({ calendarId: businessConfig.calendarId, id: context.pendingCancelBookingId });
+      } catch (err) {
+        console.error("[agent-concierge] cancelBooking failed:", err);
+        return { response: { text: CANCEL_FAILED_MESSAGE }, state: withContext(state, { pendingCancelBookingId: undefined }) };
+      }
+      return {
+        response: { text: "Your appointment has been cancelled. Let us know if you'd like to book a new one." },
+        state: withContext(state, { pendingCancelBookingId: undefined, lastAppointmentId: undefined }),
+      };
+    }
+    return { response: { text: "Reply yes to confirm cancelling, or no to keep your appointment." }, state };
+  }
+
+  if (context.awaitingCancelAppointmentId) {
+    const appointmentId = extractAppointmentId(text) ?? text.trim().toUpperCase();
+    return lookupAndAskCancelConfirmation({ appointmentId, businessConfig, calendarProvider, state });
+  }
+
+  if (context.pendingCancelConfirmationId) {
+    const suggested = context.pendingCancelConfirmationId;
+    const typedId = extractAppointmentId(text);
+    if (typedId) {
+      return lookupAndAskCancelConfirmation({ appointmentId: typedId, businessConfig, calendarProvider, state });
+    }
+    if (isAffirmative(text)) {
+      return lookupAndAskCancelConfirmation({ appointmentId: suggested, businessConfig, calendarProvider, state });
+    }
+    if (isNegative(text)) {
+      return {
+        response: { text: "No problem — what's your appointment ID?" },
+        state: withContext(state, { awaitingCancelAppointmentId: true, pendingCancelConfirmationId: undefined }),
+      };
+    }
+    return {
+      response: { text: `Just to confirm — did you mean appointment ${suggested}? Reply yes or no, or send the correct appointment ID.` },
+      state,
+    };
+  }
+
+  if (!looksLikeCancelRequest(text)) return undefined;
+
+  const typedId = extractAppointmentId(text);
+  if (typedId) {
+    return lookupAndAskCancelConfirmation({ appointmentId: typedId, businessConfig, calendarProvider, state });
+  }
+
+  if (context.lastAppointmentId) {
+    return {
+      response: { text: `Looks like you might mean ${context.lastAppointmentId} — is that the one? (yes/no, or send the correct appointment ID)` },
+      state: withContext(state, { pendingCancelConfirmationId: context.lastAppointmentId }),
+    };
+  }
+
+  return {
+    response: { text: "Sure — what's your appointment ID? You'll find it in your original booking confirmation." },
+    state: withContext(state, { awaitingCancelAppointmentId: true }),
   };
 }
 
@@ -571,10 +897,39 @@ async function handleMessageInner(input: ConciergeHandleMessageInput): Promise<C
   // Escape hatch: don't trap the chatter forever in "awaiting your
   // appointment id" / "is that the one?" once they've clearly moved on to
   // something else. Clearing here (rather than deeper in
-  // handleReschedulePreOffer) means the rest of this turn's dispatch below
-  // sees a clean context and processes the message normally.
-  if ((context.awaitingAppointmentId || context.pendingRescheduleConfirmationId) && looksLikeFreshTopic(text, now)) {
-    state = withContext(state, { awaitingAppointmentId: undefined, pendingRescheduleConfirmationId: undefined });
+  // handleReschedulePreOffer/handleCancelPreOffer) means the rest of this
+  // turn's dispatch below sees a clean context and processes the message
+  // normally.
+  const hasEscapableTrap =
+    context.awaitingAppointmentId ||
+    context.pendingRescheduleConfirmationId ||
+    context.awaitingCancelAppointmentId ||
+    context.pendingCancelConfirmationId;
+  if (hasEscapableTrap && looksLikeFreshTopic(text, now)) {
+    state = withContext(state, {
+      awaitingAppointmentId: undefined,
+      pendingRescheduleConfirmationId: undefined,
+      awaitingCancelAppointmentId: undefined,
+      pendingCancelConfirmationId: undefined,
+    });
+    context = state.context as ConciergeContext;
+  }
+
+  // pendingCancelBookingId gets its own, narrower escape check: a bare
+  // "cancel" reply there means "yes, confirm" (see confirmsCancellation),
+  // so it can't share looksLikeFreshTopic's generic "cancel" trigger.
+  //
+  // Priority is deliberately abort > fresh-topic > confirm, not "confirm
+  // blocks everything else": confirmsCancellation matches on isAffirmative,
+  // which (for the reschedule flow's lower-stakes use) treats a bare "can"
+  // as a Singlish yes — so an ordinary sentence like "can I book a
+  // different appointment" would otherwise satisfy confirmsCancellation
+  // and never even reach this escape check, silently cancelling a booking
+  // the chatter never asked to cancel. An explicit abort ("no", "don't
+  // cancel") still wins over a fresh topic, so "no, don't cancel, and
+  // book me something else" keeps the booking rather than guessing.
+  if (context.pendingCancelBookingId && !abortsCancellation(text) && looksLikeFreshTopicExcludingBareCancel(text, now)) {
+    state = withContext(state, { pendingCancelBookingId: undefined });
     context = state.context as ConciergeContext;
   }
 
@@ -597,6 +952,15 @@ async function handleMessageInner(input: ConciergeHandleMessageInput): Promise<C
     now,
   });
   if (rescheduleResult) return rescheduleResult;
+
+  const cancelResult = await handleCancelPreOffer({
+    context,
+    text,
+    businessConfig,
+    calendarProvider,
+    state,
+  });
+  if (cancelResult) return cancelResult;
 
   const parsed = parseBookingRequest(text, now);
   const looksLikeBookingRequest = parsed.hasBookingIntent || parsed.date !== undefined || parsed.time !== undefined;

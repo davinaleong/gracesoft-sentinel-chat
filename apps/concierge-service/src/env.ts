@@ -42,6 +42,15 @@ export const ConciergeServiceEnvSchema = z
      */
     BUSINESS_CONFIGS_DIR: z.string().min(1).optional(),
 
+    /**
+     * Deployment-wide fallback for `BusinessConfig.maxBookingHorizonDays` —
+     * applied only to a business config that doesn't set its own value, so
+     * ops can cap how far ahead bookings/reschedules can go without editing
+     * every tenant's JSON file individually. Unset means no deployment-wide
+     * default; a business can still set its own regardless.
+     */
+    DEFAULT_MAX_BOOKING_HORIZON_DAYS: z.coerce.number().int().positive().optional(),
+
     WHATSAPP_ENABLED: booleanFromEnvString,
     WHATSAPP_PHONE_NUMBER_ID: z.string().optional(),
     WHATSAPP_ACCESS_TOKEN: z.string().optional(),

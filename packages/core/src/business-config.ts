@@ -14,5 +14,11 @@ export const BusinessConfigSchema = z.object({
   faqBlueprintPath: z.string(),
   calendarId: z.string(),
   businessHours: BusinessHoursSchema,
+  /**
+   * How many days ahead a chatter may book or reschedule into, e.g. 60 —
+   * the outer edge of the slot engine's own search horizon (see
+   * `DEFAULT_HORIZON_DAYS`). Unset means no cap beyond that default.
+   */
+  maxBookingHorizonDays: z.number().int().positive().optional(),
 });
 export type BusinessConfig = z.infer<typeof BusinessConfigSchema>;

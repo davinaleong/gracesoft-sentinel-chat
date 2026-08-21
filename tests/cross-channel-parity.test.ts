@@ -6,6 +6,7 @@ import type {
   BusinessConfig,
   BusinessHours,
   CalendarProvider,
+  CancelBookingInput,
   ChatCompleteInput,
   ChatCompleteResult,
   ConversationState,
@@ -52,6 +53,9 @@ class FullyAvailableCalendarProvider implements CalendarProvider {
   async getBusinessHours(_input: GetBusinessHoursInput): Promise<BusinessHours> {
     // Not called by this scenario — handleMessage reads business hours from
     // BusinessConfig directly, not via the calendar provider.
+    throw new Error("not expected to be called for this scenario");
+  }
+  async cancelBooking(_input: CancelBookingInput): Promise<void> {
     throw new Error("not expected to be called for this scenario");
   }
 }

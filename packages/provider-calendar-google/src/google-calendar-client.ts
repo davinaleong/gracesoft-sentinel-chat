@@ -43,6 +43,7 @@ export interface GoogleCalendarClient {
         end?: { dateTime: string; timeZone: string };
       };
     }): Promise<{ data: GoogleCalendarEvent }>;
+    delete(params: { calendarId: string; eventId: string }): Promise<unknown>;
   };
 }
 

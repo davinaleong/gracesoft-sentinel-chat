@@ -33,6 +33,12 @@ export interface ConciergeContext {
    * `createBooking` on selection.
    */
   reschedulingBookingId?: string;
+  /** True while awaiting the chatter's reply to "what's your appointment id?" for a cancellation. Separate from `awaitingAppointmentId` (reschedule) so the two flows can't be confused with each other. */
+  awaitingCancelAppointmentId?: boolean;
+  /** Set when offering `lastAppointmentId` as a guess for a cancellation and awaiting yes/no confirmation. */
+  pendingCancelConfirmationId?: string;
+  /** The provider's own booking id for a *located* booking awaiting final "are you sure?" confirmation before it's actually cancelled — cancellation is destructive, so this extra step exists even though reschedule doesn't need one. */
+  pendingCancelBookingId?: string;
   [key: string]: unknown;
 }
 
@@ -90,8 +96,12 @@ const ORDINAL_PATTERNS: [RegExp, number][] = [
   [/\bthree\b/, 3],
 ];
 
+// Includes bare "cannot" (very common Singlish rejection on its own, e.g.
+// "cannot leh") alongside the fuller "can't make it" phrasing — safe here
+// since this is only ever checked while candidates are actively pending
+// (i.e. we just asked "which of these 3?"), not as a general classifier.
 const REJECTION_PATTERN =
-  /\b(none(?: of (?:those|these|them))?|neither|nope|no thanks?|can(?:'|no)?t (?:make it|do (?:it|any)|attend)|won'?t work|doesn'?t work|don'?t work|not (?:good|working|ok|okay|available|free|able))\b/i;
+  /\b(none(?: of (?:those|these|them))?|neither|nope|no thanks?|cannot|can(?:'|no)?t (?:make it|do (?:it|any)|attend)|won'?t work|doesn'?t work|don'?t work|not (?:good|working|ok|okay|available|free|able))\b/i;
 
 /**
  * Resolves which offered candidate the client picked, from either the
@@ -121,7 +131,11 @@ export function isRejectingCandidates(text: string): boolean {
   return REJECTION_PATTERN.test(text);
 }
 
-const AFFIRMATIVE_PATTERN = /\b(yes|yeah|yep|yup|correct|confirm(?:ed)?|that'?s (?:it|right|the one))\b/i;
+// "can" and "ok"/"okay" are idiomatic Singlish affirmatives ("can" alone,
+// in reply to a yes/no question, means "yes/that works") — safe to include
+// since this is only ever checked while a specific yes/no question is
+// actively pending, not as a general classifier.
+const AFFIRMATIVE_PATTERN = /\b(yes|yeah|yep|yup|correct|confirm(?:ed)?|can|ok(?:ay)?|sure|that'?s (?:it|right|the one))\b/i;
 const NEGATIVE_PATTERN = /\b(no|nope|not (?:it|that|right|correct)|wrong)\b/i;
 
 export function isAffirmative(text: string): boolean {

@@ -3,6 +3,7 @@ import type {
   Booking,
   BusinessHours,
   CalendarProvider,
+  CancelBookingInput,
   CreateBookingInput,
   FindBookingByAppointmentIdInput,
   GetAvailabilityInput,
@@ -106,6 +107,20 @@ export class GoogleCalendarProvider implements CalendarProvider {
       },
     });
     return toBooking(response.data, { start: input.start, end: input.end });
+  }
+
+  async cancelBooking(input: CancelBookingInput): Promise<void> {
+    try {
+      await this.config.client.events.delete({ calendarId: input.calendarId, eventId: input.id });
+    } catch (err) {
+      // Idempotent per the CalendarProvider contract: a 404 (never existed)
+      // or 410 (already cancelled — Google soft-deletes events, so a
+      // second delete of the same id is a real, expected case here, not a
+      // bug) must not surface as a failure.
+      const status = (err as { code?: number; response?: { status?: number } })?.code ?? (err as { response?: { status?: number } })?.response?.status;
+      if (status === 404 || status === 410) return;
+      throw err;
+    }
   }
 
   async getBusinessHours(_input: GetBusinessHoursInput): Promise<BusinessHours> {

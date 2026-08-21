@@ -95,5 +95,34 @@ export function runCalendarProviderContractTests(
       expect(updated.appointmentId).toBe("GS-MOVE-0003");
       expect(new Date(updated.start).toISOString()).toBe(new Date("2026-05-07T14:00:00+08:00").toISOString());
     });
+
+    it("cancelBooking removes a booking so it can no longer be found by its appointmentId", async () => {
+      const provider = await makeProvider();
+      const created = await provider.createBooking({
+        calendarId,
+        start: "2026-05-08T10:00:00+08:00",
+        end: "2026-05-08T10:30:00+08:00",
+        timezone: "Asia/Singapore",
+        summary: "Cancellable booking",
+        appointmentId: "GS-CANCEL-0004",
+      });
+      await provider.cancelBooking({ calendarId, id: created.id });
+      const found = await provider.findBookingByAppointmentId({ calendarId, appointmentId: "GS-CANCEL-0004" });
+      expect(found).toBeNull();
+    });
+
+    it("cancelBooking is idempotent — cancelling an already-cancelled booking doesn't throw", async () => {
+      const provider = await makeProvider();
+      const created = await provider.createBooking({
+        calendarId,
+        start: "2026-05-09T10:00:00+08:00",
+        end: "2026-05-09T10:30:00+08:00",
+        timezone: "Asia/Singapore",
+        summary: "Double-cancel booking",
+        appointmentId: "GS-CANCEL-0005",
+      });
+      await provider.cancelBooking({ calendarId, id: created.id });
+      await expect(provider.cancelBooking({ calendarId, id: created.id })).resolves.not.toThrow();
+    });
   });
 }

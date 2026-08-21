@@ -1,6 +1,6 @@
 import type { Dayjs } from "dayjs";
 
-const BOOKING_INTENT_PATTERN = /\b(book|booking|appointment|reserve|reservation|slot)\b/i;
+const BOOKING_INTENT_PATTERN = /\b(book|booking|appt|appointment|reserve|reservation|slot)\b/i;
 
 const WEEKDAY_NAMES = ["sunday", "monday", "tuesday", "wednesday", "thursday", "friday", "saturday"];
 
@@ -29,22 +29,30 @@ export interface ParsedBookingRequest {
 
 function parseExplicitDate(text: string, now: Dayjs): string | undefined {
   const monthPattern = MONTH_NAMES.map((m) => m.slice(0, 3)).join("|");
+  // A trailing 4-digit year is optional and, when present, pins the date
+  // exactly rather than leaving it to the "roll forward" inference below —
+  // "4 Jan 2028" must mean 2028 even though the nearest upcoming 4 Jan
+  // (this year or next) might be a different year entirely.
+  const yearSuffix = `(?:,?\\s+(\\d{4}))?`;
 
-  const dayThenMonth = new RegExp(`\\b(\\d{1,2})(?:st|nd|rd|th)?\\s+(${monthPattern})[a-z]*\\b`, "i");
-  const monthThenDay = new RegExp(`\\b(${monthPattern})[a-z]*\\s+(\\d{1,2})(?:st|nd|rd|th)?\\b`, "i");
+  const dayThenMonth = new RegExp(`\\b(\\d{1,2})(?:st|nd|rd|th)?\\s+(${monthPattern})[a-z]*${yearSuffix}\\b`, "i");
+  const monthThenDay = new RegExp(`\\b(${monthPattern})[a-z]*\\s+(\\d{1,2})(?:st|nd|rd|th)?${yearSuffix}\\b`, "i");
 
   let day: number | undefined;
   let monthAbbr: string | undefined;
+  let year: number | undefined;
 
   const m1 = text.match(dayThenMonth);
   if (m1) {
     day = Number(m1[1]);
     monthAbbr = m1[2]!.toLowerCase();
+    year = m1[3] ? Number(m1[3]) : undefined;
   } else {
     const m2 = text.match(monthThenDay);
     if (m2) {
       monthAbbr = m2[1]!.toLowerCase();
       day = Number(m2[2]);
+      year = m2[3] ? Number(m2[3]) : undefined;
     }
   }
 
@@ -53,9 +61,14 @@ function parseExplicitDate(text: string, now: Dayjs): string | undefined {
   const monthIndex = MONTH_NAMES.findIndex((m) => m.startsWith(monthAbbr));
   if (monthIndex === -1) return undefined;
 
-  let candidate = now.month(monthIndex).date(day).startOf("day");
-  // A bare "4 May" with no year means the next such date, not one already past.
-  if (candidate.isBefore(now.startOf("day"))) {
+  let candidate = now
+    .year(year ?? now.year())
+    .month(monthIndex)
+    .date(day)
+    .startOf("day");
+  // A bare "4 May" with no explicit year means the next such date, not one
+  // already past — but an explicit year is taken literally, past or future.
+  if (year === undefined && candidate.isBefore(now.startOf("day"))) {
     candidate = candidate.add(1, "year");
   }
   return candidate.format("YYYY-MM-DD");

@@ -4,7 +4,7 @@ import { RedisRateLimiter, RedisSessionStore, createRedisClient } from "@graceso
 import { PostgresConversationLogger, createPgClient } from "@gracesoft-sentinel/logging-postgres";
 import { createLogger, type Logger } from "@gracesoft-sentinel/logging";
 import type { NormalizedMessage, NormalizedResponse } from "@gracesoft-sentinel/core";
-import { loadBusinessConfig, loadBusinessConfigRegistry, loadFaqBlueprint } from "./business-config-loader.js";
+import { loadBusinessConfig, loadBusinessConfigRegistry, loadFaqBlueprint, withDefaultMaxBookingHorizon } from "./business-config-loader.js";
 import { createOnMessageHandler, type TenantContext } from "./on-message.js";
 import type { ConciergeServiceEnv } from "./env.js";
 
@@ -21,7 +21,8 @@ function buildTenantResolver(env: ConciergeServiceEnv, calendarClient: GoogleCal
   if (env.BUSINESS_CONFIGS_DIR) {
     const registry = loadBusinessConfigRegistry(env.BUSINESS_CONFIGS_DIR);
     const tenants = new Map<string, TenantContext>();
-    for (const [businessChannelId, { businessConfig, faqBlueprint }] of registry) {
+    for (const [businessChannelId, { businessConfig: rawBusinessConfig, faqBlueprint }] of registry) {
+      const businessConfig = withDefaultMaxBookingHorizon(rawBusinessConfig, env.DEFAULT_MAX_BOOKING_HORIZON_DAYS);
       tenants.set(businessChannelId, {
         businessConfig,
         faqBlueprint,
@@ -31,7 +32,7 @@ function buildTenantResolver(env: ConciergeServiceEnv, calendarClient: GoogleCal
     return (message) => (message.businessChannelId ? tenants.get(message.businessChannelId) : undefined);
   }
 
-  const businessConfig = loadBusinessConfig(env.BUSINESS_CONFIG_PATH!);
+  const businessConfig = withDefaultMaxBookingHorizon(loadBusinessConfig(env.BUSINESS_CONFIG_PATH!), env.DEFAULT_MAX_BOOKING_HORIZON_DAYS);
   const faqBlueprint = loadFaqBlueprint(env.BUSINESS_CONFIG_PATH!, businessConfig);
   const tenant: TenantContext = {
     businessConfig,

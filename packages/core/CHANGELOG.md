@@ -1,5 +1,12 @@
 # @gracesoft-sentinel/core
 
+## 0.5.0
+
+### Minor Changes
+
+- `CalendarProvider` gains `cancelBooking` (+ `CancelBookingInput`), the capability behind the concierge's cancel-appointment flow. Idempotent by contract — cancelling an already-cancelled or nonexistent booking must not throw. `runCalendarProviderContractTests` now exercises it; `provider-calendar-google` implements it via `events.delete`, swallowing a 404/410 from an already-deleted event.
+- `BusinessConfig` gains an optional `maxBookingHorizonDays`, letting a business cap how far ahead chatters may book or reschedule — mirrors the slot engine's own `horizonDays`/`DEFAULT_HORIZON_DAYS` vocabulary. Unset (the default) preserves prior behavior — no cap beyond the slot engine's own search horizon. `apps/concierge-service` also honors a `DEFAULT_MAX_BOOKING_HORIZON_DAYS` env var as a deployment-wide fallback for any business config that doesn't set its own value.
+
 ## 0.4.0
 
 ### Minor Changes

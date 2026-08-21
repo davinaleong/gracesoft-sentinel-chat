@@ -86,6 +86,11 @@ describe("isRejectingCandidates", () => {
     expect(isRejectingCandidates("i can't make it for any of those slots")).toBe(true);
     expect(isRejectingCandidates("that won't work for me")).toBe(true);
   });
+
+  it("regression: recognizes Singlish 'cannot' on its own as a rejection", () => {
+    expect(isRejectingCandidates("cannot leh")).toBe(true);
+    expect(isRejectingCandidates("cannot lah, busy that day")).toBe(true);
+  });
 });
 
 describe("isAffirmative / isNegative", () => {
@@ -99,6 +104,12 @@ describe("isAffirmative / isNegative", () => {
   it("doesn't cross-classify", () => {
     expect(isAffirmative("no thanks")).toBe(false);
     expect(isNegative("yes please")).toBe(false);
+  });
+
+  it("regression: recognizes Singlish 'can'/'ok' as affirmatives", () => {
+    expect(isAffirmative("can")).toBe(true);
+    expect(isAffirmative("can lah")).toBe(true);
+    expect(isAffirmative("ok lor")).toBe(true);
   });
 });
 

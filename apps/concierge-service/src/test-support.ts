@@ -4,6 +4,7 @@ import type {
   Booking,
   BusinessHours,
   CalendarProvider,
+  CancelBookingInput,
   ChatCompleteInput,
   ChatCompleteResult,
   ConversationState,
@@ -61,6 +62,9 @@ export class FakeCalendarProvider implements CalendarProvider {
       weekly: { mon: { open: "09:00", close: "18:00" }, tue: null, wed: null, thu: null, fri: null, sat: null, sun: null },
       exceptions: [],
     };
+  }
+  async cancelBooking(input: CancelBookingInput): Promise<void> {
+    this.bookingsById.delete(input.id);
   }
 }
 

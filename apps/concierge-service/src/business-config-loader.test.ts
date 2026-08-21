@@ -2,7 +2,7 @@ import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
-import { loadBusinessConfig, loadBusinessConfigRegistry, loadFaqBlueprint } from "./business-config-loader.js";
+import { loadBusinessConfig, loadBusinessConfigRegistry, loadFaqBlueprint, withDefaultMaxBookingHorizon } from "./business-config-loader.js";
 
 const VALID_BUSINESS_CONFIG = {
   businessId: "test-biz",
@@ -65,6 +65,24 @@ describe("loadBusinessConfig / loadFaqBlueprint", () => {
     const businessConfig = loadBusinessConfig(configPath);
     const faqBlueprint = loadFaqBlueprint(configPath, businessConfig);
     expect(faqBlueprint.system_prompt).toBe("You are a test assistant.");
+  });
+});
+
+describe("withDefaultMaxBookingHorizon", () => {
+  it("applies the deployment-wide default when the business config doesn't set its own", () => {
+    const result = withDefaultMaxBookingHorizon(VALID_BUSINESS_CONFIG, 60);
+    expect(result.maxBookingHorizonDays).toBe(60);
+  });
+
+  it("leaves an already-set business config value untouched — the business's own value always wins", () => {
+    const withOwnValue = { ...VALID_BUSINESS_CONFIG, maxBookingHorizonDays: 14 };
+    const result = withDefaultMaxBookingHorizon(withOwnValue, 60);
+    expect(result.maxBookingHorizonDays).toBe(14);
+  });
+
+  it("leaves the config as-is when no deployment-wide default is configured either", () => {
+    const result = withDefaultMaxBookingHorizon(VALID_BUSINESS_CONFIG, undefined);
+    expect(result.maxBookingHorizonDays).toBeUndefined();
   });
 });
 

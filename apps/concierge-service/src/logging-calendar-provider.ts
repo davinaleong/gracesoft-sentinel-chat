@@ -3,6 +3,7 @@ import type {
   Booking,
   BusinessHours,
   CalendarProvider,
+  CancelBookingInput,
   CreateBookingInput,
   FindBookingByAppointmentIdInput,
   GetAvailabilityInput,
@@ -69,6 +70,9 @@ export function withBookingLogging(
     },
     getBusinessHours(input: GetBusinessHoursInput): Promise<BusinessHours> {
       return inner.getBusinessHours(input);
+    },
+    cancelBooking(input: CancelBookingInput): Promise<void> {
+      return inner.cancelBooking(input);
     },
   };
 }

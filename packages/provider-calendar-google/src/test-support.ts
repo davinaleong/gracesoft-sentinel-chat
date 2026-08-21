@@ -4,6 +4,7 @@ type FreebusyParams = Parameters<GoogleCalendarClient["freebusy"]["query"]>[0];
 type InsertParams = Parameters<GoogleCalendarClient["events"]["insert"]>[0];
 type ListParams = Parameters<GoogleCalendarClient["events"]["list"]>[0];
 type PatchParams = Parameters<GoogleCalendarClient["events"]["patch"]>[0];
+type DeleteParams = Parameters<GoogleCalendarClient["events"]["delete"]>[0];
 
 /** In-memory stand-in for the Google Calendar API — no HTTP involved. */
 export class FakeGoogleCalendarClient implements GoogleCalendarClient {
@@ -11,6 +12,7 @@ export class FakeGoogleCalendarClient implements GoogleCalendarClient {
   public insertCalls: InsertParams[] = [];
   public listCalls: ListParams[] = [];
   public patchCalls: PatchParams[] = [];
+  public deleteCalls: DeleteParams[] = [];
   private nextId = 1;
   private readonly eventsById = new Map<string, GoogleCalendarEvent>();
 
@@ -61,6 +63,17 @@ export class FakeGoogleCalendarClient implements GoogleCalendarClient {
       };
       this.eventsById.set(params.eventId, updated);
       return { data: updated };
+    },
+    delete: async (params: DeleteParams) => {
+      this.deleteCalls.push(params);
+      if (!this.eventsById.has(params.eventId)) {
+        // Mirrors the real API: deleting an already-gone event is a 410, not a silent no-op.
+        const err = new Error(`No fake event with id ${params.eventId}`) as Error & { code: number };
+        err.code = 410;
+        throw err;
+      }
+      this.eventsById.delete(params.eventId);
+      return {};
     },
   };
 }

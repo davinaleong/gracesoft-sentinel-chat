@@ -3,6 +3,7 @@
   "timezone": "Asia/Singapore",
   "faqBlueprintPath": "./faq-blueprint.json",
   "calendarId": "02028f0c85298f2296f5dad3fd31f18134376c66ff24abf1ca11bcedf6576bbc@group.calendar.google.com",
+  "maxBookingHorizonDays": 60,
   "businessHours": {
     "timezone": "Asia/Singapore",
     "weekly": {

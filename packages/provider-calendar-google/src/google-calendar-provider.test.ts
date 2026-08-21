@@ -143,6 +143,41 @@ describe("GoogleCalendarProvider — request shaping", () => {
     expect(updated.appointmentId).toBe("GS-ABCD-1234");
   });
 
+  it("cancelBooking deletes the underlying event", async () => {
+    const client = new FakeGoogleCalendarClient();
+    const provider = new GoogleCalendarProvider({ client, businessHours: BUSINESS_HOURS });
+    const created = await provider.createBooking({
+      calendarId: "test-calendar",
+      start: "2026-05-04T10:00:00+08:00",
+      end: "2026-05-04T10:30:00+08:00",
+      timezone: "Asia/Singapore",
+      summary: "GS-ABCD-1234 whatsapp",
+      appointmentId: "GS-ABCD-1234",
+    });
+
+    await provider.cancelBooking({ calendarId: "test-calendar", id: created.id });
+
+    expect(client.deleteCalls).toEqual([{ calendarId: "test-calendar", eventId: created.id }]);
+    expect(await provider.findBookingByAppointmentId({ calendarId: "test-calendar", appointmentId: "GS-ABCD-1234" })).toBeNull();
+  });
+
+  it("cancelBooking swallows a 404/410 from an already-deleted event rather than throwing", async () => {
+    const client = new FakeGoogleCalendarClient();
+    const provider = new GoogleCalendarProvider({ client, businessHours: BUSINESS_HOURS });
+
+    await expect(provider.cancelBooking({ calendarId: "test-calendar", id: "never-existed" })).resolves.toBeUndefined();
+  });
+
+  it("cancelBooking re-throws a genuine failure (not a 404/410)", async () => {
+    const client = new FakeGoogleCalendarClient();
+    client.events.delete = async () => {
+      throw new Error("calendar API down");
+    };
+    const provider = new GoogleCalendarProvider({ client, businessHours: BUSINESS_HOURS });
+
+    await expect(provider.cancelBooking({ calendarId: "test-calendar", id: "some-id" })).rejects.toThrow("calendar API down");
+  });
+
   it("getBusinessHours returns the configured BusinessHours, including dated exceptions", async () => {
     const provider = new GoogleCalendarProvider({ client: new FakeGoogleCalendarClient(), businessHours: BUSINESS_HOURS });
     const hours = await provider.getBusinessHours({ calendarId: "test-calendar" });

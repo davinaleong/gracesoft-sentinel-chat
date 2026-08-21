@@ -4,6 +4,7 @@ import type {
   Booking,
   BusinessHours,
   CalendarProvider,
+  CancelBookingInput,
   CreateBookingInput,
   FindBookingByAppointmentIdInput,
   GetAvailabilityInput,
@@ -45,6 +46,10 @@ class FakeCalendarProvider implements CalendarProvider {
     const updated: Booking = { ...existing, start: input.start, end: input.end };
     this.bookings.set(updated.id, updated);
     return updated;
+  }
+
+  async cancelBooking(input: CancelBookingInput): Promise<void> {
+    this.bookings.delete(input.id);
   }
 
   async getBusinessHours(_input: GetBusinessHoursInput): Promise<BusinessHours> {

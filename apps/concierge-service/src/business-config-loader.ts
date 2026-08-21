@@ -20,6 +20,20 @@ export function loadFaqBlueprint(businessConfigPath: string, businessConfig: Bus
   return JSON.parse(readFileSync(faqPath, "utf-8")) as FaqGroundingBlueprint;
 }
 
+/**
+ * Applies a deployment-wide default for `maxBookingHorizonDays` when a
+ * business config doesn't set its own — an ops-level fallback (see
+ * `DEFAULT_MAX_BOOKING_HORIZON_DAYS` in env.ts) so a cap can be set
+ * without editing every tenant's JSON file. A business's own value, once
+ * set, always wins.
+ */
+export function withDefaultMaxBookingHorizon(businessConfig: BusinessConfig, defaultMaxBookingHorizonDays: number | undefined): BusinessConfig {
+  if (businessConfig.maxBookingHorizonDays !== undefined || defaultMaxBookingHorizonDays === undefined) {
+    return businessConfig;
+  }
+  return { ...businessConfig, maxBookingHorizonDays: defaultMaxBookingHorizonDays };
+}
+
 export interface TenantConfig {
   businessConfig: BusinessConfig;
   faqBlueprint: FaqGroundingBlueprint;

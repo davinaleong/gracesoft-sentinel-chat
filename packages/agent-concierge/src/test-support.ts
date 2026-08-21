@@ -5,6 +5,7 @@ import type {
   BusinessConfig,
   BusinessHours,
   CalendarProvider,
+  CancelBookingInput,
   ChatCompleteInput,
   ChatCompleteResult,
   CreateBookingInput,
@@ -122,6 +123,7 @@ export function fakeAiProviderWithTranscription(transcribedText: string, faqAnsw
 class RecordingCalendarProvider implements CalendarProvider {
   public createBookingCalls: CreateBookingInput[] = [];
   public updateBookingCalls: UpdateBookingInput[] = [];
+  public cancelBookingCalls: CancelBookingInput[] = [];
   private nextId = 1;
   private readonly bookingsById = new Map<string, Booking>();
 
@@ -179,6 +181,11 @@ class RecordingCalendarProvider implements CalendarProvider {
     const updated: Booking = { ...existing, start: input.start, end: input.end };
     this.bookingsById.set(updated.id, updated);
     return updated;
+  }
+
+  async cancelBooking(input: CancelBookingInput): Promise<void> {
+    this.cancelBookingCalls.push(input);
+    this.bookingsById.delete(input.id);
   }
 
   async getBusinessHours(_input: GetBusinessHoursInput): Promise<BusinessHours> {

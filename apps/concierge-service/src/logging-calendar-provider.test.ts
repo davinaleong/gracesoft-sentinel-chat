@@ -88,4 +88,25 @@ describe("withBookingLogging", () => {
       end: "2026-05-05T01:30:00.000Z",
     });
   });
+
+  it("passes cancelBooking straight through, unlogged", async () => {
+    const inner = new FakeCalendarProvider();
+    const logger = new FakeConversationLogger();
+    const wrapped = withBookingLogging(inner, logger, "session-123", createSilentTestLogger());
+
+    const created = await wrapped.createBooking({
+      calendarId: "cal-1",
+      start: "2026-05-04T01:00:00.000Z",
+      end: "2026-05-04T01:30:00.000Z",
+      timezone: "Asia/Singapore",
+      summary: "GS-AAAA-1111 whatsapp",
+      appointmentId: "GS-AAAA-1111",
+    });
+
+    await wrapped.cancelBooking({ calendarId: "cal-1", id: created.id });
+
+    const notFound = await wrapped.findBookingByAppointmentId({ calendarId: "cal-1", appointmentId: "GS-AAAA-1111" });
+    expect(notFound).toBeNull();
+    expect(logger.bookings).toHaveLength(1);
+  });
 });

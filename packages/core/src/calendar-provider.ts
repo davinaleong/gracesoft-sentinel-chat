@@ -101,6 +101,13 @@ export const UpdateBookingInputSchema = z.object({
 });
 export type UpdateBookingInput = z.infer<typeof UpdateBookingInputSchema>;
 
+export const CancelBookingInputSchema = z.object({
+  calendarId: z.string(),
+  /** The provider's own booking id (`Booking.id`), not the human `appointmentId`. */
+  id: z.string(),
+});
+export type CancelBookingInput = z.infer<typeof CancelBookingInputSchema>;
+
 /**
  * Calendar/booking capability surface. `agent-concierge` depends on this
  * interface only — never on a concrete calendar SDK.
@@ -113,4 +120,6 @@ export interface CalendarProvider {
   findBookingByAppointmentId(input: FindBookingByAppointmentIdInput): Promise<Booking | null>;
   /** Moves an existing booking to a new time, preserving its appointment id. */
   updateBooking(input: UpdateBookingInput): Promise<Booking>;
+  /** Permanently removes a booking. Idempotent: cancelling an already-cancelled/nonexistent booking must not throw. */
+  cancelBooking(input: CancelBookingInput): Promise<void>;
 }

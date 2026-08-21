@@ -790,6 +790,55 @@ describe("handleMessage — rescheduling", () => {
     expect(calendarProvider.createBookingCalls).toHaveLength(1); // no duplicate booking created
   });
 
+  it("wires a requested date through to reschedule slot offers, instead of always defaulting to the soonest opening", async () => {
+    const calendarProvider = fullyAvailableCalendarProvider();
+    const aiProvider = fakeAiProviderAnswering("unused");
+    const { state: afterBooking, appointmentId } = await bookInitialAppointment(calendarProvider);
+
+    // NOW is Friday 1 May; the booking itself is Mon 4 May. A bare weekday
+    // with no "next" means the nearest upcoming occurrence, so "tuesday"
+    // here means Tue 5 May — one day *after* the existing booking, which
+    // the old date-blind reschedule (always searching from "now or the
+    // booking's own start") had no way to honor.
+    const offer = await handleMessage({
+      message: makeMessage({ text: `change appointment ${appointmentId} to tuesday` }),
+      state: afterBooking,
+      businessConfig: TEST_BUSINESS_CONFIG,
+      calendarProvider,
+      aiProvider,
+      faqBlueprint: TEST_FAQ_BLUEPRINT,
+      now: NOW,
+    });
+    expect(offer.response.quickReplies).toHaveLength(3);
+    expect(offer.response.quickReplies![0]!.label).toContain("Tue, 5 May");
+
+    const context = offer.state.context as ConciergeContext;
+    const tuesday = new Date("2026-05-05T00:00:00+08:00").getTime();
+    for (const candidate of context.bookingCandidates!) {
+      expect(new Date(candidate.start).getTime()).toBeGreaterThanOrEqual(tuesday);
+    }
+  });
+
+  it("moves the booking directly when a requested date+time lands on an actually-free slot, without an extra selection step", async () => {
+    const calendarProvider = fullyAvailableCalendarProvider();
+    const aiProvider = fakeAiProviderAnswering("unused");
+    const { state: afterBooking, appointmentId } = await bookInitialAppointment(calendarProvider);
+
+    const moved = await handleMessage({
+      message: makeMessage({ text: `reschedule ${appointmentId} to tuesday 10am` }),
+      state: afterBooking,
+      businessConfig: TEST_BUSINESS_CONFIG,
+      calendarProvider,
+      aiProvider,
+      faqBlueprint: TEST_FAQ_BLUEPRINT,
+      now: NOW,
+    });
+    expect(moved.response.text).toMatch(/has been moved to/i);
+    expect(moved.response.text).toContain(appointmentId);
+    expect(calendarProvider.updateBookingCalls).toHaveLength(1);
+    expect(calendarProvider.updateBookingCalls[0]!.start).toBe(new Date("2026-05-05T10:00:00+08:00").toISOString());
+  });
+
   it("suggests the chatter's own last appointment id and proceeds once confirmed", async () => {
     const calendarProvider = fullyAvailableCalendarProvider();
     const aiProvider = fakeAiProviderAnswering("unused");
@@ -971,5 +1020,472 @@ describe("handleMessage — rescheduling", () => {
     expect(calendarProvider.updateBookingCalls).toHaveLength(1);
     expect(calendarProvider.createBookingCalls).toHaveLength(1);
     expect(moved.response.text).toMatch(/has been moved to/i);
+  });
+
+  it("regression: abandoning a reschedule offer and starting a fresh booking creates a new booking, not a move of the old one", async () => {
+    // Reproduces a real production bug: a chatter who saw reschedule
+    // candidates but never picked one, then asked for a brand new
+    // appointment instead, had their new candidate list silently corrupted
+    // by the leftover reschedulingBookingId marker — picking one of the
+    // *new* slots moved the old (possibly already-resolved) booking rather
+    // than creating a new one, and told the chatter it succeeded either way.
+    const calendarProvider = fullyAvailableCalendarProvider();
+    const aiProvider = fakeAiProviderAnswering("unused");
+    const { state: afterBooking, appointmentId } = await bookInitialAppointment(calendarProvider);
+
+    // Start (but abandon) a reschedule: candidates offered, reschedulingBookingId now set.
+    const rescheduleOffer = await handleMessage({
+      message: makeMessage({ text: `reschedule ${appointmentId}` }),
+      state: afterBooking,
+      businessConfig: TEST_BUSINESS_CONFIG,
+      calendarProvider,
+      aiProvider,
+      faqBlueprint: TEST_FAQ_BLUEPRINT,
+      now: NOW,
+    });
+    expect((rescheduleOffer.state.context as ConciergeContext).reschedulingBookingId).toBeDefined();
+
+    // Instead of picking one, the chatter asks for a completely new, unrelated booking.
+    const freshOffer = await handleMessage({
+      message: makeMessage({ text: "actually, can I book a different appointment" }),
+      state: rescheduleOffer.state,
+      businessConfig: TEST_BUSINESS_CONFIG,
+      calendarProvider,
+      aiProvider,
+      faqBlueprint: TEST_FAQ_BLUEPRINT,
+      now: NOW,
+    });
+    expect((freshOffer.state.context as ConciergeContext).reschedulingBookingId).toBeUndefined();
+
+    const created = await handleMessage({
+      message: makeMessage({ quickReplyId: "slot-1" }),
+      state: freshOffer.state,
+      businessConfig: TEST_BUSINESS_CONFIG,
+      calendarProvider,
+      aiProvider,
+      faqBlueprint: TEST_FAQ_BLUEPRINT,
+      now: NOW,
+    });
+    expect(created.response.text).toMatch(/you're booked/i);
+    expect(created.response.text).not.toMatch(/has been moved to/i);
+    expect(calendarProvider.createBookingCalls).toHaveLength(2); // the original + this new one
+    expect(calendarProvider.updateBookingCalls).toHaveLength(0);
+  });
+
+  it("regression: 'i want to change appointment' (no possessive 'my') is recognized as a reschedule request, not a fresh booking", async () => {
+    const calendarProvider = fullyAvailableCalendarProvider();
+    const aiProvider = fakeAiProviderAnswering("unused");
+    const { state: afterBooking, appointmentId } = await bookInitialAppointment(calendarProvider);
+
+    const result = await handleMessage({
+      message: makeMessage({ text: "hi, i want to change appointment" }),
+      state: afterBooking,
+      businessConfig: TEST_BUSINESS_CONFIG,
+      calendarProvider,
+      aiProvider,
+      faqBlueprint: TEST_FAQ_BLUEPRINT,
+      now: NOW,
+    });
+
+    // A fresh-booking misfire would offer slots without ever mentioning the
+    // existing appointment id.
+    expect(result.response.text).toContain(appointmentId);
+    const context = result.state.context as ConciergeContext;
+    expect(context.reschedulingBookingId ?? context.pendingRescheduleConfirmationId).toBeTruthy();
+  });
+});
+
+describe("handleMessage — maxBookingHorizonDays", () => {
+  // NOW is Fri 1 May 10:00; a 3-day cap puts the last bookable instant at
+  // Mon 4 May 23:59:59 — chosen so "4 May" (a real business day) sits right
+  // at the boundary and "10 May" is unambiguously beyond it.
+  const CAPPED_CONFIG = { ...TEST_BUSINESS_CONFIG, maxBookingHorizonDays: 3 };
+
+  it("declines a fresh-booking request for an explicit date beyond the cap, without running a search", async () => {
+    const calendarProvider = fullyAvailableCalendarProvider();
+    const result = await handleMessage({
+      message: makeMessage({ text: "book for 10 May" }),
+      state: makeDisclosedState(),
+      businessConfig: CAPPED_CONFIG,
+      calendarProvider,
+      aiProvider: fakeAiProviderAnswering("unused"),
+      faqBlueprint: TEST_FAQ_BLUEPRINT,
+      now: NOW,
+    });
+    expect(result.response.text).toMatch(/only able to book appointments up to/i);
+    expect(result.response.quickReplies).toBeUndefined();
+  });
+
+  it("still offers slots for an explicit date right at the edge of the cap", async () => {
+    const result = await handleMessage({
+      message: makeMessage({ text: "book for 4 May" }),
+      state: makeDisclosedState(),
+      businessConfig: CAPPED_CONFIG,
+      calendarProvider: fullyAvailableCalendarProvider(),
+      aiProvider: fakeAiProviderAnswering("unused"),
+      faqBlueprint: TEST_FAQ_BLUEPRINT,
+      now: NOW,
+    });
+    expect(result.response.quickReplies).toHaveLength(3);
+  });
+
+  it("never offers a default (no date given) slot beyond the cap", async () => {
+    const result = await handleMessage({
+      message: makeMessage({ text: "book an appointment" }),
+      state: makeDisclosedState(),
+      businessConfig: CAPPED_CONFIG,
+      calendarProvider: fullyAvailableCalendarProvider(),
+      aiProvider: fakeAiProviderAnswering("unused"),
+      faqBlueprint: TEST_FAQ_BLUEPRINT,
+      now: NOW,
+    });
+    const context = result.state.context as ConciergeContext;
+    const maxInstant = new Date("2026-05-04T23:59:59.999+08:00").getTime();
+    for (const candidate of context.bookingCandidates ?? []) {
+      expect(new Date(candidate.start).getTime()).toBeLessThanOrEqual(maxInstant);
+    }
+  });
+
+  it("declines a reschedule request for an explicit date beyond the cap", async () => {
+    const calendarProvider = fullyAvailableCalendarProvider();
+    const aiProvider = fakeAiProviderAnswering("unused");
+    const booked = await handleMessage({
+      message: makeMessage({ text: "book for 4 May at 11am" }),
+      state: makeDisclosedState(),
+      businessConfig: CAPPED_CONFIG,
+      calendarProvider,
+      aiProvider,
+      faqBlueprint: TEST_FAQ_BLUEPRINT,
+      now: NOW,
+    });
+    const appointmentId = (booked.state.context as ConciergeContext).lastAppointmentId!;
+
+    const result = await handleMessage({
+      message: makeMessage({ text: `reschedule ${appointmentId} to 10 May` }),
+      state: booked.state,
+      businessConfig: CAPPED_CONFIG,
+      calendarProvider,
+      aiProvider,
+      faqBlueprint: TEST_FAQ_BLUEPRINT,
+      now: NOW,
+    });
+    expect(result.response.text).toMatch(/only able to book appointments up to/i);
+  });
+});
+
+describe("handleMessage — cancelling", () => {
+  async function bookInitialAppointment(calendarProvider: ReturnType<typeof fullyAvailableCalendarProvider>) {
+    const result = await handleMessage({
+      message: makeMessage({ text: "book for 4 May at 11am" }),
+      state: makeDisclosedState(),
+      businessConfig: TEST_BUSINESS_CONFIG,
+      calendarProvider,
+      aiProvider: fakeAiProviderAnswering("unused"),
+      faqBlueprint: TEST_FAQ_BLUEPRINT,
+      now: NOW,
+    });
+    const appointmentId = (result.state.context as ConciergeContext).lastAppointmentId!;
+    return { state: result.state, appointmentId };
+  }
+
+  it("cancels a booking end to end when the chatter provides their appointment id directly", async () => {
+    const calendarProvider = fullyAvailableCalendarProvider();
+    const aiProvider = fakeAiProviderAnswering("unused");
+    const { state: afterBooking, appointmentId } = await bookInitialAppointment(calendarProvider);
+
+    const confirmAsk = await handleMessage({
+      message: makeMessage({ text: `cancel my appointment ${appointmentId}` }),
+      state: afterBooking,
+      businessConfig: TEST_BUSINESS_CONFIG,
+      calendarProvider,
+      aiProvider,
+      faqBlueprint: TEST_FAQ_BLUEPRINT,
+      now: NOW,
+    });
+    expect(confirmAsk.response.text).toContain(appointmentId);
+    expect(confirmAsk.response.text).toMatch(/can't be undone/i);
+    expect((confirmAsk.state.context as ConciergeContext).pendingCancelBookingId).toBeDefined();
+    expect(calendarProvider.cancelBookingCalls).toHaveLength(0);
+
+    const cancelled = await handleMessage({
+      message: makeMessage({ text: "yes" }),
+      state: confirmAsk.state,
+      businessConfig: TEST_BUSINESS_CONFIG,
+      calendarProvider,
+      aiProvider,
+      faqBlueprint: TEST_FAQ_BLUEPRINT,
+      now: NOW,
+    });
+    expect(cancelled.response.text).toMatch(/has been cancelled/i);
+    expect(calendarProvider.cancelBookingCalls).toHaveLength(1);
+    expect((cancelled.state.context as ConciergeContext).pendingCancelBookingId).toBeUndefined();
+    expect((cancelled.state.context as ConciergeContext).lastAppointmentId).toBeUndefined();
+
+    const stillFound = await calendarProvider.findBookingByAppointmentId({ calendarId: TEST_BUSINESS_CONFIG.calendarId, appointmentId });
+    expect(stillFound).toBeNull();
+  });
+
+  it("recognizes 'appt' in a cancel request", async () => {
+    const calendarProvider = fullyAvailableCalendarProvider();
+    const aiProvider = fakeAiProviderAnswering("unused");
+    const { state: afterBooking, appointmentId } = await bookInitialAppointment(calendarProvider);
+
+    const result = await handleMessage({
+      message: makeMessage({ text: `cancel my appt ${appointmentId}` }),
+      state: afterBooking,
+      businessConfig: TEST_BUSINESS_CONFIG,
+      calendarProvider,
+      aiProvider,
+      faqBlueprint: TEST_FAQ_BLUEPRINT,
+      now: NOW,
+    });
+    expect(result.response.text).toMatch(/can't be undone/i);
+  });
+
+  it("replying with the bare word 'cancel' at the final confirmation step confirms it (not escapes it)", async () => {
+    const calendarProvider = fullyAvailableCalendarProvider();
+    const aiProvider = fakeAiProviderAnswering("unused");
+    const { state: afterBooking, appointmentId } = await bookInitialAppointment(calendarProvider);
+
+    const confirmAsk = await handleMessage({
+      message: makeMessage({ text: `cancel my appointment ${appointmentId}` }),
+      state: afterBooking,
+      businessConfig: TEST_BUSINESS_CONFIG,
+      calendarProvider,
+      aiProvider,
+      faqBlueprint: TEST_FAQ_BLUEPRINT,
+      now: NOW,
+    });
+
+    const cancelled = await handleMessage({
+      message: makeMessage({ text: "cancel" }),
+      state: confirmAsk.state,
+      businessConfig: TEST_BUSINESS_CONFIG,
+      calendarProvider,
+      aiProvider,
+      faqBlueprint: TEST_FAQ_BLUEPRINT,
+      now: NOW,
+    });
+    expect(cancelled.response.text).toMatch(/has been cancelled/i);
+    expect(calendarProvider.cancelBookingCalls).toHaveLength(1);
+  });
+
+  it("declining the final confirmation keeps the booking", async () => {
+    const calendarProvider = fullyAvailableCalendarProvider();
+    const aiProvider = fakeAiProviderAnswering("unused");
+    const { state: afterBooking, appointmentId } = await bookInitialAppointment(calendarProvider);
+
+    const confirmAsk = await handleMessage({
+      message: makeMessage({ text: `cancel my appointment ${appointmentId}` }),
+      state: afterBooking,
+      businessConfig: TEST_BUSINESS_CONFIG,
+      calendarProvider,
+      aiProvider,
+      faqBlueprint: TEST_FAQ_BLUEPRINT,
+      now: NOW,
+    });
+
+    const kept = await handleMessage({
+      message: makeMessage({ text: "no, keep it" }),
+      state: confirmAsk.state,
+      businessConfig: TEST_BUSINESS_CONFIG,
+      calendarProvider,
+      aiProvider,
+      faqBlueprint: TEST_FAQ_BLUEPRINT,
+      now: NOW,
+    });
+    expect(kept.response.text).toMatch(/still booked/i);
+    expect(calendarProvider.cancelBookingCalls).toHaveLength(0);
+    expect((kept.state.context as ConciergeContext).pendingCancelBookingId).toBeUndefined();
+
+    const stillFound = await calendarProvider.findBookingByAppointmentId({ calendarId: TEST_BUSINESS_CONFIG.calendarId, appointmentId });
+    expect(stillFound).not.toBeNull();
+  });
+
+  it("regression: 'don't cancel' keeps the booking despite literally containing the word 'cancel'", async () => {
+    const calendarProvider = fullyAvailableCalendarProvider();
+    const aiProvider = fakeAiProviderAnswering("unused");
+    const { state: afterBooking, appointmentId } = await bookInitialAppointment(calendarProvider);
+
+    const confirmAsk = await handleMessage({
+      message: makeMessage({ text: `cancel my appointment ${appointmentId}` }),
+      state: afterBooking,
+      businessConfig: TEST_BUSINESS_CONFIG,
+      calendarProvider,
+      aiProvider,
+      faqBlueprint: TEST_FAQ_BLUEPRINT,
+      now: NOW,
+    });
+
+    const kept = await handleMessage({
+      message: makeMessage({ text: "no wait, don't cancel it" }),
+      state: confirmAsk.state,
+      businessConfig: TEST_BUSINESS_CONFIG,
+      calendarProvider,
+      aiProvider,
+      faqBlueprint: TEST_FAQ_BLUEPRINT,
+      now: NOW,
+    });
+    expect(kept.response.text).toMatch(/still booked/i);
+    expect(calendarProvider.cancelBookingCalls).toHaveLength(0);
+  });
+
+  it("suggests the chatter's own last appointment id and proceeds once confirmed", async () => {
+    const calendarProvider = fullyAvailableCalendarProvider();
+    const aiProvider = fakeAiProviderAnswering("unused");
+    const { state: afterBooking, appointmentId } = await bookInitialAppointment(calendarProvider);
+
+    const suggestion = await handleMessage({
+      message: makeMessage({ text: "cancel my appointment" }),
+      state: afterBooking,
+      businessConfig: TEST_BUSINESS_CONFIG,
+      calendarProvider,
+      aiProvider,
+      faqBlueprint: TEST_FAQ_BLUEPRINT,
+      now: NOW,
+    });
+    expect(suggestion.response.text).toContain(appointmentId);
+    expect((suggestion.state.context as ConciergeContext).pendingCancelConfirmationId).toBe(appointmentId);
+
+    const confirmAsk = await handleMessage({
+      message: makeMessage({ text: "yes" }),
+      state: suggestion.state,
+      businessConfig: TEST_BUSINESS_CONFIG,
+      calendarProvider,
+      aiProvider,
+      faqBlueprint: TEST_FAQ_BLUEPRINT,
+      now: NOW,
+    });
+    expect(confirmAsk.response.text).toMatch(/can't be undone/i);
+  });
+
+  it("asks for the id directly when the suggested one is rejected", async () => {
+    const calendarProvider = fullyAvailableCalendarProvider();
+    const aiProvider = fakeAiProviderAnswering("unused");
+    const { state: afterBooking } = await bookInitialAppointment(calendarProvider);
+
+    const suggestion = await handleMessage({
+      message: makeMessage({ text: "cancel my appointment" }),
+      state: afterBooking,
+      businessConfig: TEST_BUSINESS_CONFIG,
+      calendarProvider,
+      aiProvider,
+      faqBlueprint: TEST_FAQ_BLUEPRINT,
+      now: NOW,
+    });
+
+    const declined = await handleMessage({
+      message: makeMessage({ text: "no, wrong one" }),
+      state: suggestion.state,
+      businessConfig: TEST_BUSINESS_CONFIG,
+      calendarProvider,
+      aiProvider,
+      faqBlueprint: TEST_FAQ_BLUEPRINT,
+      now: NOW,
+    });
+    expect(declined.response.text).toMatch(/what's your appointment id/i);
+    expect((declined.state.context as ConciergeContext).awaitingCancelAppointmentId).toBe(true);
+  });
+
+  it("reports no booking found for an unrecognized appointment id, and keeps awaiting a correction", async () => {
+    const result = await handleMessage({
+      message: makeMessage({ text: "cancel appointment GS-ZZZZ-9999" }),
+      state: makeDisclosedState(),
+      businessConfig: TEST_BUSINESS_CONFIG,
+      calendarProvider: fullyAvailableCalendarProvider(),
+      aiProvider: fakeAiProviderAnswering("unused"),
+      faqBlueprint: TEST_FAQ_BLUEPRINT,
+      now: NOW,
+    });
+    expect(result.response.text).toMatch(/couldn't find a booking/i);
+    expect((result.state.context as ConciergeContext).awaitingCancelAppointmentId).toBe(true);
+  });
+
+  it("regression: doesn't trap the chatter once they move on from an unanswered 'what's your appointment id?' (cancel flow)", async () => {
+    const first = await handleMessage({
+      message: makeMessage({ text: "I want to cancel my appointment" }),
+      state: makeDisclosedState(),
+      businessConfig: TEST_BUSINESS_CONFIG,
+      calendarProvider: fullyAvailableCalendarProvider(),
+      aiProvider: fakeAiProviderAnswering("unused"),
+      faqBlueprint: TEST_FAQ_BLUEPRINT,
+      now: NOW,
+    });
+    expect((first.state.context as ConciergeContext).awaitingCancelAppointmentId).toBe(true);
+
+    const afterStart = await handleMessage({
+      message: makeMessage({ text: "/start" }),
+      state: first.state,
+      businessConfig: TEST_BUSINESS_CONFIG,
+      calendarProvider: fullyAvailableCalendarProvider(),
+      aiProvider: fakeAiProviderAnswering("unused"),
+      faqBlueprint: TEST_FAQ_BLUEPRINT,
+      now: NOW,
+    });
+    expect(afterStart.response.text).not.toMatch(/couldn't find a booking/i);
+    expect((afterStart.state.context as ConciergeContext).awaitingCancelAppointmentId).toBeUndefined();
+  });
+
+  it("regression: a fresh booking request escapes the final 'are you sure you want to cancel?' gate instead of being swallowed", async () => {
+    const calendarProvider = fullyAvailableCalendarProvider();
+    const aiProvider = fakeAiProviderAnswering("unused");
+    const { state: afterBooking, appointmentId } = await bookInitialAppointment(calendarProvider);
+
+    const confirmAsk = await handleMessage({
+      message: makeMessage({ text: `cancel my appointment ${appointmentId}` }),
+      state: afterBooking,
+      businessConfig: TEST_BUSINESS_CONFIG,
+      calendarProvider,
+      aiProvider,
+      faqBlueprint: TEST_FAQ_BLUEPRINT,
+      now: NOW,
+    });
+    expect((confirmAsk.state.context as ConciergeContext).pendingCancelBookingId).toBeDefined();
+
+    const freshOffer = await handleMessage({
+      message: makeMessage({ text: "actually, can I book a different appointment" }),
+      state: confirmAsk.state,
+      businessConfig: TEST_BUSINESS_CONFIG,
+      calendarProvider,
+      aiProvider,
+      faqBlueprint: TEST_FAQ_BLUEPRINT,
+      now: NOW,
+    });
+    expect(freshOffer.response.quickReplies).toHaveLength(3);
+    expect((freshOffer.state.context as ConciergeContext).pendingCancelBookingId).toBeUndefined();
+    // The original booking must still exist — abandoning the cancel confirmation must not cancel it as a side effect.
+    expect(calendarProvider.cancelBookingCalls).toHaveLength(0);
+  });
+
+  it("regression: a reschedule request mid-cancel-flow escapes the cancel state and starts the reschedule flow instead", async () => {
+    const calendarProvider = fullyAvailableCalendarProvider();
+    const aiProvider = fakeAiProviderAnswering("unused");
+    const { state: afterBooking, appointmentId } = await bookInitialAppointment(calendarProvider);
+
+    const cancelStart = await handleMessage({
+      message: makeMessage({ text: "I want to cancel my appointment" }),
+      state: afterBooking,
+      businessConfig: TEST_BUSINESS_CONFIG,
+      calendarProvider,
+      aiProvider,
+      faqBlueprint: TEST_FAQ_BLUEPRINT,
+      now: NOW,
+    });
+    // A lastAppointmentId already exists (from bookInitialAppointment), so
+    // this suggests it rather than asking for the id outright.
+    expect((cancelStart.state.context as ConciergeContext).pendingCancelConfirmationId).toBe(appointmentId);
+
+    const rescheduleInstead = await handleMessage({
+      message: makeMessage({ text: `actually, reschedule ${appointmentId} instead` }),
+      state: cancelStart.state,
+      businessConfig: TEST_BUSINESS_CONFIG,
+      calendarProvider,
+      aiProvider,
+      faqBlueprint: TEST_FAQ_BLUEPRINT,
+      now: NOW,
+    });
+    expect((rescheduleInstead.state.context as ConciergeContext).pendingCancelConfirmationId).toBeUndefined();
+    expect(rescheduleInstead.response.quickReplies).toHaveLength(3);
+    expect((rescheduleInstead.state.context as ConciergeContext).reschedulingBookingId).toBeDefined();
   });
 });
