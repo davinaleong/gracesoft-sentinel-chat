@@ -45,6 +45,31 @@ describe("answerFaq", () => {
   });
 });
 
+describe("answerFaq — AI disclosure", () => {
+  it("always instructs the model not to self-disclose being an AI, regardless of the blueprint's own system_prompt", async () => {
+    const provider = fakeAiProviderAnswering("some answer");
+    await answerFaq("/start", TEST_FAQ_BLUEPRINT, provider);
+    const systemMessage = provider.calls[0]!.messages.find((m) => m.role === "system");
+    expect(systemMessage?.content).toMatch(/already discloses/i);
+    expect(systemMessage?.content).toMatch(/never (restate|introduce yourself)/i);
+  });
+
+  it("wires the blueprint's if_asked_directly guidance into the prompt", async () => {
+    const provider = fakeAiProviderAnswering("some answer");
+    await answerFaq("are you a bot?", TEST_FAQ_BLUEPRINT, provider);
+    const systemMessage = provider.calls[0]!.messages.find((m) => m.role === "system");
+    expect(systemMessage?.content).toContain(TEST_FAQ_BLUEPRINT.ai_disclosure.if_asked_directly);
+  });
+
+  it("omits if_asked_directly guidance entirely when the blueprint doesn't define it", async () => {
+    const provider = fakeAiProviderAnswering("some answer");
+    const blueprint = { ...TEST_FAQ_BLUEPRINT, ai_disclosure: { required: true, opening_message: TEST_FAQ_BLUEPRINT.ai_disclosure.opening_message } };
+    await answerFaq("are you a bot?", blueprint, provider);
+    const systemMessage = provider.calls[0]!.messages.find((m) => m.role === "system");
+    expect(systemMessage?.content).not.toMatch(/if asked directly/i);
+  });
+});
+
 describe("answerFaq — prompt injection resistance", () => {
   it("includes an explicit instruction that the chatter's message is untrusted, not instructions", async () => {
     const provider = fakeAiProviderAnswering("some answer");
