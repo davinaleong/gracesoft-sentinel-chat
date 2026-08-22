@@ -20,6 +20,10 @@ describe("renderLegalPage", () => {
     expect(html).not.toContain("# Sentinel Concierge");
   });
 
+  it("links the favicon in the document head", () => {
+    expect(html).toContain('<link rel="icon" href="/favicon.png" type="image/png">');
+  });
+
   it("escapes the title against HTML injection", () => {
     const malicious = renderLegalPage('<script>alert(1)</script>', loadPrivacyPolicy());
     expect(malicious).not.toContain("<script>alert(1)</script>");

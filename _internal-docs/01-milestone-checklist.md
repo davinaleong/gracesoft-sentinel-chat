@@ -266,6 +266,46 @@ Carry forward the reliability work already validated in the original plan, now a
 
 ---
 
+# Milestone 12 — Chatter-Facing Timezone Labeling
+
+### Goal
+Remove the ambiguity in every time a chatter sees. Times are already computed correctly in the business's configured timezone (dayjs + IANA tz data, DST-aware for free) — the gap is that nothing ever tells the chatter *which* timezone that is, which only matters once a chatter might not be assumed to share it.
+
+### Deliverables
+* `formatSlotLabel` (and any other chatter-facing date/time formatting) appends an explicit business-timezone label, e.g. `"Tue, 5 May, 9:00am (Singapore time)"` instead of the current bare `"Tue, 5 May, 9:00am"`
+* Every message that shows a specific date/time to a chatter carries the label — slot offers, booking confirmations, reschedule confirmations, cancellation confirmations
+* Deliberately *not* in scope: detecting or converting to the chatter's own timezone (unreliable — neither WhatsApp nor Telegram webhook payloads carry it) or multi-location/multi-timezone businesses (a bigger `BusinessConfig` redesign, not this milestone)
+
+### Checklist
+* [ ] Add a business-timezone label to `formatSlotLabel`'s output
+* [ ] Audit `agent-concierge` for any other chatter-facing date/time formatting call sites and apply the same label
+* [ ] Regression test: slot-offer, booking-confirmation, reschedule-confirmation, and cancellation-confirmation messages all include the timezone label
+
+---
+
+# Milestone 13 — No-Code Setup CLI (`setup-cli`)
+
+### Goal
+Replace hand-authored `BusinessConfig`/`businessHours`/FAQ-blueprint JSON files with a guided CLI wizard, so onboarding a new business doesn't require understanding the underlying schema shapes or manually typing ~25 public-holiday date entries. Scoped as low-code for whoever runs it (not a self-serve web form for the business owner directly) — see progress log for why a web admin panel is deliberately deferred until this proves the underlying data model.
+
+### Deliverables
+* New `@gracesoft-sentinel/setup-cli` package — depends only on `core` (reuses its Zod schemas for live validation), zero imports from `agent-*`/`channel-*`/`provider-*`
+* Interactive wizard: business identity, timezone, calendar id, weekly business hours — validated live against `core`'s `BusinessConfigSchema`/`BusinessHoursSchema`, re-prompting on invalid input rather than writing a broken file
+* Bundled per-country public-holiday dataset (e.g. `date-holidays`) pre-fills `businessHours.exceptions` for the owner to review/trim, instead of manual date entry
+* Interactive wizard: guided FAQ-blueprint builder (business description/tone, Q&A knowledge-base entries, guardrails, escalation contact) assembling the `FaqGroundingBlueprint` JSON shape behind the scenes — the owner never edits that structure directly
+* Output written directly to the same file location(s) `concierge-service`/`cook-service` already load from (`BUSINESS_CONFIG_PATH` for single-tenant, or a new `<businessChannelId>.json` inside `BUSINESS_CONFIGS_DIR` for multi-tenant) — no changes needed elsewhere in the stack
+* Holidays stay a static list *in* the generated config (offline-reliable, versioned in git) — the bundled dataset is a setup-time convenience only, never a runtime dependency
+
+### Checklist
+* [ ] Scaffold `@gracesoft-sentinel/setup-cli` package
+* [ ] Business-hours + holiday wizard, validated against `core`'s schemas
+* [ ] Bundled holiday dataset integration for exception pre-fill
+* [ ] FAQ-blueprint wizard, assembling the full `FaqGroundingBlueprint` shape
+* [ ] Writes to `BUSINESS_CONFIG_PATH`-shaped single file, or a new file inside a `BUSINESS_CONFIGS_DIR`-shaped directory
+* [ ] Confirm zero imports from `agent-*`/`channel-*`/`provider-*` packages (boundary lint)
+
+---
+
 # Suggested Build Order
 
 1. Milestone 0 — Monorepo foundation
@@ -278,3 +318,5 @@ Carry forward the reliability work already validated in the original plan, now a
 8. Milestone 9 — Legal & compliance pages (needed before any real WhatsApp Business verification/App Review submission)
 9. Milestone 10 — Hardening
 10. Milestone 11 — Future work
+11. Milestone 12 — Chatter-facing timezone labeling
+12. Milestone 13 — No-code setup CLI

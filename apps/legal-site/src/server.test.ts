@@ -26,6 +26,12 @@ describe("legal-site — reachability", () => {
     expect(res.status).toBe(200);
   });
 
+  it("GET /favicon.png returns the icon, unauthenticated", async () => {
+    const res = await fetch(`${baseUrl}/favicon.png`);
+    expect(res.status).toBe(200);
+    expect(res.headers.get("content-type")).toContain("image/png");
+  });
+
   it.each([
     ["/concierge/privacy"],
     ["/concierge/terms"],

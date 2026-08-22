@@ -28,6 +28,10 @@ No WhatsApp, no Telegram, no OpenAI SDK, no live Calendar API — everything moc
 * [x] **Regression:** business-hours map correctly excludes non-business days (e.g. 2 May) — next-slot suggestion rolls to the correct next business day (4 May), not the excluded date *(directly reproduces the bug in `testing.md`)*
 * [x] Timezone handling: booking created in business's configured timezone regardless of client's apparent locale/phrasing
 * [x] Day.js formatting consistency across slot suggestion → confirmation → calendar write
+* [ ] **Milestone 12:** slot-offer messages include an explicit business-timezone label, not a bare date/time
+* [ ] **Milestone 12:** booking-confirmation message includes the timezone label
+* [ ] **Milestone 12:** reschedule-confirmation message includes the timezone label
+* [ ] **Milestone 12:** cancellation-confirmation message includes the timezone label
 
 ### Concierge — FAQ Logic
 * [x] Known FAQ question → correct blueprint answer returned
@@ -150,6 +154,27 @@ Covers `packages/legal-concierge`, `packages/legal-cook`, and `apps/legal-site`.
 * [x] Purpose of collection is stated
 * [x] Retention period is stated
 * [x] Contact method for data access/deletion requests is stated
+
+---
+
+# 6. Setup CLI Tests (Milestone 13)
+
+Covers `@gracesoft-sentinel/setup-cli`. Since the wizard's whole job is producing config the services will actually load, "correctness" means round-tripping through the real loaders, not just matching a shape in isolation.
+
+### Config generation
+* [ ] Wizard output validates against `core`'s `BusinessConfigSchema` for a range of representative inputs
+* [ ] Wizard re-prompts (doesn't write a file) on invalid input — malformed timezone string, bad business-hours shape, etc.
+* [ ] Wizard output validates against `core`'s `BusinessHoursSchema`, including the dated-exception shape
+* [ ] Public-holiday pre-fill produces exceptions correctly scoped to the selected country/year, and remains editable before the file is written (not silently auto-committed)
+* [ ] FAQ-blueprint wizard output matches the `FaqGroundingBlueprint` shape `answerFaq` expects (`system_prompt`, `ai_disclosure`, `knowledge_base`, `guardrails`, `escalation_policy`)
+
+### Round-trip with the real loaders
+* [ ] A generated business config file loads correctly via `loadBusinessConfig` (single-tenant) with no manual edits needed
+* [ ] A generated business config file loads correctly via `loadBusinessConfigRegistry` when placed in a `BUSINESS_CONFIGS_DIR`-shaped directory
+* [ ] A generated FAQ blueprint file loads correctly via `loadFaqBlueprint` and produces a working `answerFaq` call
+
+### Boundary enforcement
+* [ ] Static lint check: `setup-cli` has zero imports from `agent-*`/`channel-*`/`provider-*` packages
 
 ---
 
