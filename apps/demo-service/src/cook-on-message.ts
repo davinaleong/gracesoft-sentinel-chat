@@ -1,5 +1,5 @@
 import { handleMessage } from "@gracesoft-sentinel/agent-cook";
-import type { AIProvider, ConversationState, NormalizedMessage, NormalizedResponse, SessionStore } from "@gracesoft-sentinel/core";
+import type { AIProvider, ConversationState, NormalizedMessage, NormalizedResponse, RecipeSourceProvider, SessionStore } from "@gracesoft-sentinel/core";
 import { redactPii, type Logger } from "@gracesoft-sentinel/logging";
 import type { ConversationLogger } from "@gracesoft-sentinel/logging-postgres";
 
@@ -11,6 +11,8 @@ export interface CookOnMessageDeps {
   conversationLogger: ConversationLogger;
   appLogger: Logger;
   sessionTtlSeconds?: number;
+  /** "Mother's Day Edition" (Milestone 11), opt-in — see agent-cook's CookHandleMessageInput. */
+  recipeSourceProvider?: RecipeSourceProvider;
 }
 
 function sessionIdFor(message: NormalizedMessage): string {
@@ -36,9 +38,9 @@ async function logSafely(
 
 /**
  * The Cook half of demo-service — a trimmed version of apps/cook-service's
- * own on-message.ts (no "Mother's Day Edition" recipe source, no
- * per-service rate limiter — see concierge-on-message.ts for the same
- * rationale). Fully self-contained, same reason as the Concierge half.
+ * own on-message.ts (no per-service rate limiter — see
+ * concierge-on-message.ts for the same rationale). Fully self-contained,
+ * same reason as the Concierge half.
  */
 export function createCookOnMessageHandler(deps: CookOnMessageDeps): (message: NormalizedMessage) => Promise<NormalizedResponse> {
   return async (message: NormalizedMessage): Promise<NormalizedResponse> => {
@@ -55,7 +57,7 @@ export function createCookOnMessageHandler(deps: CookOnMessageDeps): (message: N
       occurredAt: message.timestamp,
     });
 
-    const result = await handleMessage({ message, state, aiProvider: deps.aiProvider });
+    const result = await handleMessage({ message, state, aiProvider: deps.aiProvider, recipeSourceProvider: deps.recipeSourceProvider });
 
     await deps.sessionStore.set(result.state, deps.sessionTtlSeconds ?? DEFAULT_SESSION_TTL_SECONDS);
 

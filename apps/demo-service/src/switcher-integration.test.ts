@@ -7,6 +7,7 @@ import {
   FakeAiProvider,
   FakeCalendarProvider,
   FakeConversationLogger,
+  FakeRecipeSourceProvider,
   FakeSessionStore,
   TEST_BUSINESS_CONFIG,
   TEST_FAQ_BLUEPRINT,
@@ -23,7 +24,7 @@ function makeMessage(overrides: Partial<NormalizedMessage> = {}): NormalizedMess
   return { id: "msg-1", channel: "telegram", senderId: "chatter-1", timestamp: new Date().toISOString(), raw: {}, ...overrides };
 }
 
-function buildTestSwitcher() {
+function buildTestSwitcher(recipeSourceProvider?: FakeRecipeSourceProvider) {
   const aiProvider = new FakeAiProvider();
   const sessionStore = new FakeSessionStore();
   const conversationLogger = new FakeConversationLogger();
@@ -38,7 +39,7 @@ function buildTestSwitcher() {
     conversationLogger,
     appLogger,
   });
-  const cookOnMessage = createCookOnMessageHandler({ aiProvider, sessionStore, conversationLogger, appLogger });
+  const cookOnMessage = createCookOnMessageHandler({ aiProvider, sessionStore, conversationLogger, appLogger, recipeSourceProvider });
 
   const onMessage = createAgentSwitcher({
     agents: [
@@ -96,6 +97,27 @@ describe("demo-service — switching between real agent-concierge and agent-cook
     // is still there — proves the switcher didn't clobber it.
     const resumed = await onMessage(makeMessage({ text: "the first one" }));
     expect(resumed.text).toMatch(/booked/i);
+  });
+
+  it("routes a personal-recipe request to Cook's RAG lookup after switching, when a recipeSourceProvider is configured", async () => {
+    const recipeSourceProvider = new FakeRecipeSourceProvider([
+      { id: "1", title: "Mom's Chicken Curry", raw: { content: "Simmer the chicken for 40 minutes with coconut milk." } },
+    ]);
+    const { onMessage } = buildTestSwitcher(recipeSourceProvider);
+
+    await onMessage(makeMessage({ text: "/cook" }));
+    const response = await onMessage(makeMessage({ text: "do you have my mom's recipe for chicken curry?" }));
+
+    expect(response.text).toContain("Mom's Chicken Curry");
+    expect(response.text).toContain("Simmer the chicken for 40 minutes");
+    expect(recipeSourceProvider.findRecipesCalls).toHaveLength(1);
+  });
+
+  it("falls back to Cook's ordinary photo prompt for personal-recipe phrasing when no recipeSourceProvider is configured", async () => {
+    const { onMessage } = buildTestSwitcher();
+    await onMessage(makeMessage({ text: "/cook" }));
+    const response = await onMessage(makeMessage({ text: "do you have my mom's recipe for chicken curry?" }));
+    expect(response.text).toMatch(/send me a photo/i);
   });
 
   it("logs each turn under the correct agent name, not always whichever was active last", async () => {

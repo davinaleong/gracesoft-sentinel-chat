@@ -13,8 +13,11 @@ import type {
   EmbedInput,
   EmbedResult,
   FindBookingByAppointmentIdInput,
+  FindRecipesInput,
   GetAvailabilityInput,
   GetBusinessHoursInput,
+  RecipeSourceProvider,
+  RecipeSourceResult,
   SessionStore,
   TranscribeAudioInput,
   TranscribeAudioResult,
@@ -127,6 +130,17 @@ export class FakeAiProvider implements AIProvider {
   }
   async transcribeAudio(_input: TranscribeAudioInput): Promise<TranscribeAudioResult> {
     return { text: "fake transcription" };
+  }
+}
+
+export class FakeRecipeSourceProvider implements RecipeSourceProvider {
+  public findRecipesCalls: FindRecipesInput[] = [];
+
+  constructor(private readonly results: RecipeSourceResult[]) {}
+
+  async findRecipes(input: FindRecipesInput): Promise<RecipeSourceResult[]> {
+    this.findRecipesCalls.push(input);
+    return this.results;
   }
 }
 

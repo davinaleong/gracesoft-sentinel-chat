@@ -1,10 +1,11 @@
 import { OpenAIProvider } from "@gracesoft-sentinel/provider-ai-openai";
 import { GoogleCalendarProvider, createGoogleCalendarClient } from "@gracesoft-sentinel/provider-calendar-google";
+import { GoogleDriveRecipeProvider, createGoogleDriveClient } from "@gracesoft-sentinel/provider-drive-google";
 import { RedisRateLimiter, RedisSessionStore, createRedisClient } from "@gracesoft-sentinel/provider-session-redis";
 import { PostgresConversationLogger, createPgClient } from "@gracesoft-sentinel/logging-postgres";
 import { createLogger, type Logger } from "@gracesoft-sentinel/logging";
 import { createAgentSwitcher } from "@gracesoft-sentinel/agent-switcher";
-import type { NormalizedMessage, NormalizedResponse } from "@gracesoft-sentinel/core";
+import type { AIProvider, NormalizedMessage, NormalizedResponse, RecipeSourceProvider } from "@gracesoft-sentinel/core";
 import { loadBusinessConfig, loadFaqBlueprint } from "./business-config-loader.js";
 import { createConciergeOnMessageHandler } from "./concierge-on-message.js";
 import { createCookOnMessageHandler } from "./cook-on-message.js";
@@ -17,6 +18,25 @@ export interface Composition {
 }
 
 const RATE_LIMITED_MESSAGE = "You're sending messages a bit quickly — please wait a moment and try again.";
+
+/**
+ * "Mother's Day Edition" (Milestone 11) — fully opt-in, mirrors
+ * cook-service's own `buildRecipeSourceProvider`. Only constructed when
+ * GOOGLE_DRIVE_RECIPES_FOLDER_ID is set; every other demo-service run gets
+ * `undefined` and Cook's photo-based flow is entirely unaffected. Reuses
+ * the same service-account credentials env.ts already requires for
+ * Calendar — `createGoogleDriveClient` builds its own separately-scoped
+ * (drive.readonly) JWT client from them, independent of the calendar one.
+ */
+function buildRecipeSourceProvider(env: DemoServiceEnv, aiProvider: AIProvider): RecipeSourceProvider | undefined {
+  if (!env.GOOGLE_DRIVE_RECIPES_FOLDER_ID) return undefined;
+
+  const client = createGoogleDriveClient({
+    serviceAccountEmail: env.GOOGLE_SERVICE_ACCOUNT_EMAIL,
+    privateKey: env.GOOGLE_SERVICE_ACCOUNT_PRIVATE_KEY,
+  });
+  return new GoogleDriveRecipeProvider({ client, aiProvider, folderId: env.GOOGLE_DRIVE_RECIPES_FOLDER_ID });
+}
 
 /**
  * The composition root: wires agent-concierge AND agent-cook side by side
@@ -67,7 +87,8 @@ export function buildComposition(env: DemoServiceEnv): Composition {
     conversationLogger,
     appLogger,
   });
-  const cookOnMessage = createCookOnMessageHandler({ aiProvider, sessionStore, conversationLogger, appLogger });
+  const recipeSourceProvider = buildRecipeSourceProvider(env, aiProvider);
+  const cookOnMessage = createCookOnMessageHandler({ aiProvider, sessionStore, conversationLogger, appLogger, recipeSourceProvider });
 
   const switcherOnMessage = createAgentSwitcher({
     agents: [

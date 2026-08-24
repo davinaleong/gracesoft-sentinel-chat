@@ -39,6 +39,17 @@ export const DemoServiceEnvSchema = z
     /** Which agent a chatter talks to before ever explicitly switching. */
     DEMO_DEFAULT_AGENT: z.enum(["concierge", "cook"]).default("concierge"),
 
+    /**
+     * "Mother's Day Edition" (opt-in): personal recipe retrieval via RAG
+     * over a Google Drive folder, for the Cook half. Reuses the same
+     * GOOGLE_SERVICE_ACCOUNT_EMAIL/PRIVATE_KEY already required above for
+     * Calendar — one service account, two different OAuth-scoped clients
+     * (calendar vs. drive.readonly), no separate credential needed. Unlike
+     * cook-service, no conditional-requirement check is needed here since
+     * those two vars are already unconditionally required by this schema.
+     */
+    GOOGLE_DRIVE_RECIPES_FOLDER_ID: z.string().optional(),
+
     WHATSAPP_ENABLED: booleanFromEnvString,
     WHATSAPP_PHONE_NUMBER_ID: z.string().optional(),
     WHATSAPP_ACCESS_TOKEN: z.string().optional(),
