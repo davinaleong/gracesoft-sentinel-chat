@@ -13,6 +13,15 @@ export interface FaqGroundingBlueprint {
     required: boolean;
     opening_message: string;
     if_asked_directly?: string;
+    /**
+     * How many hours of no contact must pass before the disclosure is shown
+     * again to an otherwise-ongoing conversation. Deliberately independent
+     * of the session's own TTL — a session can (and often does) stay alive
+     * indefinitely via routine activity, which would otherwise let this
+     * compliance requirement quietly go dormant forever. Unset defaults to
+     * `DEFAULT_REDISCLOSURE_AFTER_HOURS` in handle-message.ts.
+     */
+    redisclosure_after_hours?: number;
   };
   /** Arbitrary structured facts the model must ground every answer in. */
   knowledge_base: unknown;

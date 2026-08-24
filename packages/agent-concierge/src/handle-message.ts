@@ -10,7 +10,7 @@ import type {
 import type { Dayjs } from "dayjs";
 import { resolveDayHours, isWithinHours } from "./business-hours.js";
 import { extractAppointmentId, generateAppointmentId } from "./appointment-id.js";
-import { parseBookingRequest } from "./booking-intent.js";
+import { parseBookingRequest, type ParsedBookingRequest } from "./booking-intent.js";
 import {
   bookingsMadeToday,
   DAILY_BOOKING_LIMIT,
@@ -278,9 +278,16 @@ async function handleBookingRequest(params: {
   calendarProvider: CalendarProvider;
   state: ConversationState;
   now: Dayjs;
+  /**
+   * Skips re-parsing `text` for date/time — used when they were already
+   * parsed on an earlier turn (the booking-vs-reschedule ambiguity check)
+   * and `text` here is just the chatter's later "new booking" reply, which
+   * wouldn't itself re-parse to the same date/time.
+   */
+  parsedOverride?: ParsedBookingRequest;
 }): Promise<ConciergeHandleMessageResult> {
   const { businessConfig, calendarProvider, state, now } = params;
-  const parsed = parseBookingRequest(params.text, now);
+  const parsed = params.parsedOverride ?? parseBookingRequest(params.text, now);
   const businessHours = businessConfig.businessHours;
   const maxDate = maxAdvanceBookingDate(businessConfig, now);
 
@@ -835,6 +842,93 @@ async function handleCancelPreOffer(params: {
   };
 }
 
+// Deliberately narrow (just "new") rather than trying to enumerate every
+// phrasing — the ambiguity prompt itself tells the chatter to say exactly
+// this, so it doesn't need to guess at open-ended free text the way intent
+// detection elsewhere in this file does.
+const NEW_BOOKING_CHOICE_PATTERN = /\bnew\b/i;
+
+function looksLikeNewBookingChoice(text: string): boolean {
+  return NEW_BOOKING_CHOICE_PATTERN.test(text);
+}
+
+function askBookingVsRescheduleAmbiguity(params: {
+  lastAppointmentId: string;
+  parsed: ParsedBookingRequest;
+  state: ConversationState;
+}): ConciergeHandleMessageResult {
+  return {
+    response: {
+      text: `Did you want to move your existing appointment (${params.lastAppointmentId}) to this date, or book a new one? Reply with your appointment ID to move it, or just say "new" to book separately.`,
+    },
+    state: withContext(params.state, {
+      pendingBookingAmbiguity: { date: params.parsed.date, time: params.parsed.time },
+    }),
+  };
+}
+
+/**
+ * Catches the gap a casual "can change to Tuesday" fell into: no
+ * "appointment"/"appt"/"booking" noun, so `looksLikeRescheduleRequest`
+ * never fires, but a date *did* parse — which used to fall straight
+ * through to `handleBookingRequest` and silently create a second,
+ * unrelated booking while leaving the original untouched. Only engages
+ * when there's an actual `lastAppointmentId` to be ambiguous *with*; a
+ * chatter with no existing booking saying "Tuesday" is unambiguously
+ * just booking.
+ */
+async function handleBookingVsRescheduleAmbiguity(params: {
+  context: ConciergeContext;
+  text: string;
+  message: NormalizedMessage;
+  businessConfig: BusinessConfig;
+  calendarProvider: CalendarProvider;
+  state: ConversationState;
+  now: Dayjs;
+}): Promise<ConciergeHandleMessageResult | undefined> {
+  const { context, text, message, businessConfig, calendarProvider, state, now } = params;
+
+  if (context.pendingBookingAmbiguity) {
+    const { date, time } = context.pendingBookingAmbiguity;
+    const typedId = extractAppointmentId(text);
+    if (typedId) {
+      return lookupAndOfferReschedule({
+        appointmentId: typedId,
+        businessConfig,
+        calendarProvider,
+        state: withContext(state, { pendingBookingAmbiguity: undefined }),
+        now,
+        requestedDate: date,
+        requestedTime: time,
+      });
+    }
+    if (looksLikeNewBookingChoice(text)) {
+      return handleBookingRequest({
+        text,
+        message,
+        businessConfig,
+        calendarProvider,
+        state: withContext(state, { pendingBookingAmbiguity: undefined }),
+        now,
+        parsedOverride: { hasBookingIntent: true, date, time },
+      });
+    }
+    return {
+      response: {
+        text: `Sorry, just to be clear — reply with your appointment ID to move ${context.lastAppointmentId} to this date, or just say "new" to book a separate appointment.`,
+      },
+      state,
+    };
+  }
+
+  if (!context.lastAppointmentId) return undefined;
+
+  const parsed = parseBookingRequest(text, now);
+  if (parsed.hasBookingIntent || (parsed.date === undefined && parsed.time === undefined)) return undefined;
+
+  return askBookingVsRescheduleAmbiguity({ lastAppointmentId: context.lastAppointmentId, parsed, state });
+}
+
 function escalate(
   state: ConversationState,
   message: NormalizedMessage,
@@ -962,6 +1056,17 @@ async function handleMessageInner(input: ConciergeHandleMessageInput): Promise<C
   });
   if (cancelResult) return cancelResult;
 
+  const ambiguityResult = await handleBookingVsRescheduleAmbiguity({
+    context,
+    text,
+    message,
+    businessConfig,
+    calendarProvider,
+    state,
+    now,
+  });
+  if (ambiguityResult) return ambiguityResult;
+
   const parsed = parseBookingRequest(text, now);
   const looksLikeBookingRequest = parsed.hasBookingIntent || parsed.date !== undefined || parsed.time !== undefined;
 
@@ -983,28 +1088,55 @@ async function handleMessageInner(input: ConciergeHandleMessageInput): Promise<C
   return { response: { text: answer.text }, state: withContext(state, {}) };
 }
 
+/** Applies when a blueprint doesn't set its own `ai_disclosure.redisclosure_after_hours`. */
+const DEFAULT_REDISCLOSURE_AFTER_HOURS = 24;
+
+/**
+ * Whether the disclosure needs to be (re-)shown this turn. Deliberately
+ * independent of the session's own TTL: `on-message.ts` renews that TTL on
+ * *every* message, so a conversation kept alive by routine back-and-forth
+ * would otherwise never go "fresh" again — silently suppressing this
+ * compliance requirement for as long as someone keeps occasionally
+ * messaging, potentially forever. Measuring elapsed time since
+ * `aiDisclosedAt` was last actually *set* (not touched) is what makes a
+ * real gap in contact — not just session inactivity — the thing that
+ * brings it back.
+ */
+function shouldDiscloseAi(context: ConciergeContext | undefined, blueprint: FaqGroundingBlueprint, now: Dayjs): boolean {
+  const lastDisclosedAt = context?.aiDisclosedAt;
+  if (!lastDisclosedAt) return true;
+  const windowHours = blueprint.ai_disclosure.redisclosure_after_hours ?? DEFAULT_REDISCLOSURE_AFTER_HOURS;
+  return now.diff(dayjs(lastDisclosedAt), "hour", true) >= windowHours;
+}
+
 /**
  * The blueprint's `ai_disclosure` is a compliance requirement, not a style
  * choice: the chatter must be told they're talking to an AI at the start of
- * every new conversation. Applied as a wrapper so every response path
- * (booking, FAQ, escalation) gets it exactly once per session, without each
- * branch needing to remember to do it itself.
+ * every new conversation, and again after a real gap in contact. Applied as
+ * a wrapper so every response path (booking, FAQ, escalation) gets it,
+ * without each branch needing to remember to do it itself.
  *
- * `aiDisclosed` is re-stamped onto the outgoing state on *every* turn once
- * set, not only the turn it's first set on — defense in depth alongside
+ * `aiDisclosedAt` is re-stamped onto the outgoing state on *every* turn
+ * (carrying forward its existing value when not re-disclosing this turn),
+ * not only the turn it's first set on — defense in depth alongside
  * `withContext`'s merge semantics, since this is a compliance requirement
  * where "silently regressed" is worse than "redundantly reapplied".
  */
 function withAiDisclosure(
   input: ConciergeHandleMessageInput,
-  result: ConciergeHandleMessageResult
+  result: ConciergeHandleMessageResult,
+  now: Dayjs
 ): ConciergeHandleMessageResult {
   if (!input.faqBlueprint.ai_disclosure.required) return result;
 
-  const alreadyDisclosed = Boolean((input.state.context as ConciergeContext | undefined)?.aiDisclosed);
-  const context = { ...(result.state.context as ConciergeContext), aiDisclosed: true };
+  const priorContext = input.state.context as ConciergeContext | undefined;
+  const needsDisclosure = shouldDiscloseAi(priorContext, input.faqBlueprint, now);
+  const context = {
+    ...(result.state.context as ConciergeContext),
+    aiDisclosedAt: needsDisclosure ? now.toISOString() : priorContext?.aiDisclosedAt,
+  };
 
-  if (alreadyDisclosed) {
+  if (!needsDisclosure) {
     return { ...result, state: { ...result.state, context } };
   }
 
@@ -1019,7 +1151,27 @@ function withAiDisclosure(
   };
 }
 
+// A bare "hi"/"hello"/"/start" with nothing else — distinct from RESET_PATTERN,
+// which matches that same wording *anywhere* in a longer message for a
+// different purpose (escaping a stuck state). This one only fires when the
+// entire message is just the greeting, so a real question that happens to
+// start with "hi" (e.g. "hi, what do you guys do?") still gets answered.
+const BARE_GREETING_PATTERN = /^\s*(\/start|hi|hello|hey|yo|sup)[.!?]*\s*$/i;
+
 export async function handleMessage(input: ConciergeHandleMessageInput): Promise<ConciergeHandleMessageResult> {
+  const now = dayjs(input.now);
+
+  // The disclosure's own opening_message already reads as a complete,
+  // self-contained welcome — routing a bare "hi" through the LLM on top of
+  // it produces two greetings stacked in one message (the disclosure, then
+  // the model's own "Hi there! How can I help?"). Only skips the LLM call
+  // on the specific turn that would double up: when disclosure is about to
+  // (re-)fire, and the chatter said nothing but a greeting.
+  const needsDisclosure = shouldDiscloseAi(input.state.context as ConciergeContext | undefined, input.faqBlueprint, now);
+  if (needsDisclosure && input.faqBlueprint.ai_disclosure.required && input.message.text && BARE_GREETING_PATTERN.test(input.message.text)) {
+    return withAiDisclosure(input, { response: {}, state: input.state }, now);
+  }
+
   const result = await handleMessageInner(input);
-  return withAiDisclosure(input, result);
+  return withAiDisclosure(input, result, now);
 }

@@ -45,7 +45,7 @@ function makeState(context: Record<string, unknown> = {}): ConversationState {
 
 /** A session where the AI disclosure has already been given, for tests that don't care about it. */
 function makeDisclosedState(context: Record<string, unknown> = {}): ConversationState {
-  return makeState({ ...context, aiDisclosed: true });
+  return makeState({ ...context, aiDisclosedAt: NOW.toISOString() });
 }
 
 describe("handleMessage — no date/time given", () => {
@@ -489,7 +489,52 @@ describe("handleMessage — AI disclosure", () => {
       now: NOW,
     });
     expect(result.response.text).toBe(`${OPENING_MESSAGE}\n\nWe're open weekdays.`);
-    expect((result.state.context as ConciergeContext).aiDisclosed).toBe(true);
+    expect((result.state.context as ConciergeContext).aiDisclosedAt).toBe(NOW.toISOString());
+  });
+
+  it("regression: a bare 'hi' as the very first message doesn't stack the disclosure under a second, LLM-generated greeting", async () => {
+    const aiProvider = fakeAiProviderAnswering("Hi there! How can I assist you with GraceSoft today?", false);
+    const result = await handleMessage({
+      message: makeMessage({ text: "Hi" }),
+      state: makeState(),
+      businessConfig: TEST_BUSINESS_CONFIG,
+      calendarProvider: fullyAvailableCalendarProvider(),
+      aiProvider,
+      faqBlueprint: TEST_FAQ_BLUEPRINT,
+      now: NOW,
+    });
+    expect(result.response.text).toBe(OPENING_MESSAGE);
+    expect((result.state.context as ConciergeContext).aiDisclosedAt).toBe(NOW.toISOString());
+    // Skips the LLM call entirely for a bare greeting pre-disclosure.
+    expect(aiProvider.calls).toHaveLength(0);
+  });
+
+  it("regression: 'hello'/'/start' as the first message get the same bare-greeting treatment as 'hi'", async () => {
+    for (const text of ["hello", "/start", "Hey!"]) {
+      const result = await handleMessage({
+        message: makeMessage({ text }),
+        state: makeState(),
+        businessConfig: TEST_BUSINESS_CONFIG,
+        calendarProvider: fullyAvailableCalendarProvider(),
+        aiProvider: fakeAiProviderAnswering("unused"),
+        faqBlueprint: TEST_FAQ_BLUEPRINT,
+        now: NOW,
+      });
+      expect(result.response.text).toBe(OPENING_MESSAGE);
+    }
+  });
+
+  it("still answers normally when a message merely starts with a greeting word but asks something substantive", async () => {
+    const result = await handleMessage({
+      message: makeMessage({ text: "hi, what do you guys do?" }),
+      state: makeState(),
+      businessConfig: TEST_BUSINESS_CONFIG,
+      calendarProvider: fullyAvailableCalendarProvider(),
+      aiProvider: fakeAiProviderAnswering("We build web apps.", false),
+      faqBlueprint: TEST_FAQ_BLUEPRINT,
+      now: NOW,
+    });
+    expect(result.response.text).toBe(`${OPENING_MESSAGE}\n\nWe build web apps.`);
   });
 
   it("applies to the booking path too, since it's the start of the conversation regardless of intent", async () => {
@@ -533,7 +578,104 @@ describe("handleMessage — AI disclosure", () => {
     expect(second.response.text).not.toContain(OPENING_MESSAGE);
   });
 
-  it("survives a turn that rebuilds context from scratch (regression: offering slots used to silently drop aiDisclosed, re-showing the intro on the turn after)", async () => {
+  it("regression: re-shows the disclosure after a real gap in contact, even though ongoing activity kept the session itself alive the whole time", async () => {
+    // This is the actual bug report: on-message.ts renews the session's own
+    // TTL on every message, so a conversation kept alive by routine
+    // activity never technically goes "fresh" again under a TTL-based
+    // check — silently suppressing the disclosure forever as long as
+    // someone keeps occasionally messaging. Redisclosure must be measured
+    // from when the disclosure was last actually *shown*, not from
+    // whatever the most recent message happened to be.
+    const calendarProvider = fullyAvailableCalendarProvider();
+    const aiProvider = fakeAiProviderAnswering("We're open weekdays.", false);
+    const hoursLater = (h: number) => new Date(NOW.getTime() + h * 60 * 60 * 1000);
+
+    const t0 = await handleMessage({
+      message: makeMessage({ text: "What are your opening hours?" }),
+      state: makeState(),
+      businessConfig: TEST_BUSINESS_CONFIG,
+      calendarProvider,
+      aiProvider,
+      faqBlueprint: TEST_FAQ_BLUEPRINT,
+      now: NOW,
+    });
+    expect(t0.response.text).toContain(OPENING_MESSAGE);
+
+    // +2h: well within the window, disclosure doesn't repeat.
+    const t2 = await handleMessage({
+      message: makeMessage({ text: "And your location?" }),
+      state: t0.state,
+      businessConfig: TEST_BUSINESS_CONFIG,
+      calendarProvider,
+      aiProvider,
+      faqBlueprint: TEST_FAQ_BLUEPRINT,
+      now: hoursLater(2),
+    });
+    expect(t2.response.text).not.toContain(OPENING_MESSAGE);
+
+    // +23h from the *original* disclosure (21h after the last message):
+    // still under the 24h window measured from when it was last shown.
+    const t23 = await handleMessage({
+      message: makeMessage({ text: "Any parking nearby?" }),
+      state: t2.state,
+      businessConfig: TEST_BUSINESS_CONFIG,
+      calendarProvider,
+      aiProvider,
+      faqBlueprint: TEST_FAQ_BLUEPRINT,
+      now: hoursLater(23),
+    });
+    expect(t23.response.text).not.toContain(OPENING_MESSAGE);
+
+    // +25h from the original disclosure: a real gap has now elapsed since
+    // it was last shown, despite the session having stayed continuously
+    // active the entire time — this is the case that used to never re-fire.
+    const t25 = await handleMessage({
+      message: makeMessage({ text: "One more question" }),
+      state: t23.state,
+      businessConfig: TEST_BUSINESS_CONFIG,
+      calendarProvider,
+      aiProvider,
+      faqBlueprint: TEST_FAQ_BLUEPRINT,
+      now: hoursLater(25),
+    });
+    expect(t25.response.text).toContain(OPENING_MESSAGE);
+    expect((t25.state.context as ConciergeContext).aiDisclosedAt).toBe(hoursLater(25).toISOString());
+  });
+
+  it("honors a business-configured redisclosure window instead of the 24h default", async () => {
+    const blueprintWithShortWindow = {
+      ...TEST_FAQ_BLUEPRINT,
+      ai_disclosure: { ...TEST_FAQ_BLUEPRINT.ai_disclosure, redisclosure_after_hours: 1 },
+    };
+    const calendarProvider = fullyAvailableCalendarProvider();
+    const aiProvider = fakeAiProviderAnswering("We're open weekdays.", false);
+
+    const first = await handleMessage({
+      message: makeMessage({ text: "What are your opening hours?" }),
+      state: makeState(),
+      businessConfig: TEST_BUSINESS_CONFIG,
+      calendarProvider,
+      aiProvider,
+      faqBlueprint: blueprintWithShortWindow,
+      now: NOW,
+    });
+    expect(first.response.text).toContain(OPENING_MESSAGE);
+
+    // +2h: beyond this business's own 1h window, even though that's well
+    // under the 24h default other tests rely on.
+    const second = await handleMessage({
+      message: makeMessage({ text: "And your location?" }),
+      state: first.state,
+      businessConfig: TEST_BUSINESS_CONFIG,
+      calendarProvider,
+      aiProvider,
+      faqBlueprint: blueprintWithShortWindow,
+      now: new Date(NOW.getTime() + 2 * 60 * 60 * 1000),
+    });
+    expect(second.response.text).toContain(OPENING_MESSAGE);
+  });
+
+  it("survives a turn that rebuilds context from scratch (regression: offering slots used to silently drop aiDisclosedAt, re-showing the intro on the turn after)", async () => {
     const calendarProvider = fullyAvailableCalendarProvider();
     const aiProvider = fakeAiProviderAnswering("We're open weekdays.", false);
 
@@ -550,7 +692,7 @@ describe("handleMessage — AI disclosure", () => {
     expect(first.response.text).toContain(OPENING_MESSAGE);
 
     // Turn 2: booking path — offerSlotsResponse rebuilds context as just
-    // { bookingCandidates }, the exact branch that used to lose aiDisclosed.
+    // { bookingCandidates }, the exact branch that used to lose aiDisclosedAt.
     const second = await handleMessage({
       message: makeMessage({ text: "book something" }),
       state: first.state,
@@ -562,7 +704,7 @@ describe("handleMessage — AI disclosure", () => {
     });
     expect(second.response.text).not.toContain(OPENING_MESSAGE);
 
-    // Turn 3: if aiDisclosed didn't survive turn 2, the intro would wrongly reappear here.
+    // Turn 3: if aiDisclosedAt did not survive turn 2, the intro would wrongly reappear here.
     const third = await handleMessage({
       message: makeMessage({ text: "none of those work for me" }),
       state: second.state,
@@ -1092,6 +1234,182 @@ describe("handleMessage — rescheduling", () => {
     expect(result.response.text).toContain(appointmentId);
     const context = result.state.context as ConciergeContext;
     expect(context.reschedulingBookingId ?? context.pendingRescheduleConfirmationId).toBeTruthy();
+  });
+});
+
+describe("handleMessage — booking vs reschedule ambiguity", () => {
+  async function bookInitialAppointment(calendarProvider: ReturnType<typeof fullyAvailableCalendarProvider>) {
+    const result = await handleMessage({
+      message: makeMessage({ text: "book for 4 May at 11am" }),
+      state: makeDisclosedState(),
+      businessConfig: TEST_BUSINESS_CONFIG,
+      calendarProvider,
+      aiProvider: fakeAiProviderAnswering("unused"),
+      faqBlueprint: TEST_FAQ_BLUEPRINT,
+      now: NOW,
+    });
+    const appointmentId = (result.state.context as ConciergeContext).lastAppointmentId!;
+    return { state: result.state, appointmentId };
+  }
+
+  it("regression: 'can change to tuesday' (no 'appointment'/'appt'/'booking' noun) no longer silently creates a second, unrelated booking", async () => {
+    const calendarProvider = fullyAvailableCalendarProvider();
+    const aiProvider = fakeAiProviderAnswering("unused");
+    const { state: afterBooking, appointmentId } = await bookInitialAppointment(calendarProvider);
+
+    const result = await handleMessage({
+      message: makeMessage({ text: "Can change to Tuesday" }),
+      state: afterBooking,
+      businessConfig: TEST_BUSINESS_CONFIG,
+      calendarProvider,
+      aiProvider,
+      faqBlueprint: TEST_FAQ_BLUEPRINT,
+      now: NOW,
+    });
+
+    // The old bug: this silently went through createNewBooking, leaving the
+    // original untouched and never asking. Neither should happen now.
+    expect(calendarProvider.createBookingCalls).toHaveLength(1); // still just the original
+    expect(calendarProvider.updateBookingCalls).toHaveLength(0);
+    expect(result.response.text).toContain(appointmentId);
+    expect(result.response.text).toMatch(/move|new one/i);
+    expect((result.state.context as ConciergeContext).pendingBookingAmbiguity).toEqual({ date: "2026-05-05" });
+  });
+
+  it("moves the original booking (not a new one) when the chatter replies with their appointment id", async () => {
+    const calendarProvider = fullyAvailableCalendarProvider();
+    const aiProvider = fakeAiProviderAnswering("unused");
+    const { state: afterBooking, appointmentId } = await bookInitialAppointment(calendarProvider);
+
+    const ambiguity = await handleMessage({
+      message: makeMessage({ text: "Can change to Tuesday" }),
+      state: afterBooking,
+      businessConfig: TEST_BUSINESS_CONFIG,
+      calendarProvider,
+      aiProvider,
+      faqBlueprint: TEST_FAQ_BLUEPRINT,
+      now: NOW,
+    });
+
+    const resolved = await handleMessage({
+      message: makeMessage({ text: appointmentId }),
+      state: ambiguity.state,
+      businessConfig: TEST_BUSINESS_CONFIG,
+      calendarProvider,
+      aiProvider,
+      faqBlueprint: TEST_FAQ_BLUEPRINT,
+      now: NOW,
+    });
+
+    expect(resolved.response.text).toContain(appointmentId);
+    expect(resolved.response.quickReplies).toHaveLength(3);
+    const context = resolved.state.context as ConciergeContext;
+    expect(context.reschedulingBookingId).toBeTruthy();
+    expect(context.pendingBookingAmbiguity).toBeUndefined();
+    // Candidates should be anchored to the originally-requested Tuesday, not
+    // just "soonest opening" — proves the stored date survived the round trip.
+    const tuesday = new Date("2026-05-05T00:00:00+08:00").getTime();
+    for (const candidate of context.bookingCandidates!) {
+      expect(new Date(candidate.start).getTime()).toBeGreaterThanOrEqual(tuesday);
+    }
+  });
+
+  it("books a genuinely new, separate appointment when the chatter says 'new', leaving the original untouched", async () => {
+    const calendarProvider = fullyAvailableCalendarProvider();
+    const aiProvider = fakeAiProviderAnswering("unused");
+    const { state: afterBooking, appointmentId: originalId } = await bookInitialAppointment(calendarProvider);
+
+    const ambiguity = await handleMessage({
+      message: makeMessage({ text: "Can change to Tuesday" }),
+      state: afterBooking,
+      businessConfig: TEST_BUSINESS_CONFIG,
+      calendarProvider,
+      aiProvider,
+      faqBlueprint: TEST_FAQ_BLUEPRINT,
+      now: NOW,
+    });
+
+    const resolved = await handleMessage({
+      message: makeMessage({ text: "new" }),
+      state: ambiguity.state,
+      businessConfig: TEST_BUSINESS_CONFIG,
+      calendarProvider,
+      aiProvider,
+      faqBlueprint: TEST_FAQ_BLUEPRINT,
+      now: NOW,
+    });
+
+    expect(resolved.response.text).toMatch(/available slots/i);
+    expect(resolved.response.text).not.toContain(originalId);
+    const context = resolved.state.context as ConciergeContext;
+    expect(context.reschedulingBookingId).toBeUndefined();
+    expect(context.pendingBookingAmbiguity).toBeUndefined();
+    // The original booking is still exactly where it was.
+    expect(calendarProvider.updateBookingCalls).toHaveLength(0);
+  });
+
+  it("re-asks, without guessing, when the reply to the ambiguity prompt is unclear", async () => {
+    const calendarProvider = fullyAvailableCalendarProvider();
+    const aiProvider = fakeAiProviderAnswering("unused");
+    const { state: afterBooking } = await bookInitialAppointment(calendarProvider);
+
+    const ambiguity = await handleMessage({
+      message: makeMessage({ text: "Can change to Tuesday" }),
+      state: afterBooking,
+      businessConfig: TEST_BUSINESS_CONFIG,
+      calendarProvider,
+      aiProvider,
+      faqBlueprint: TEST_FAQ_BLUEPRINT,
+      now: NOW,
+    });
+
+    const stillUnclear = await handleMessage({
+      message: makeMessage({ text: "maybe" }),
+      state: ambiguity.state,
+      businessConfig: TEST_BUSINESS_CONFIG,
+      calendarProvider,
+      aiProvider,
+      faqBlueprint: TEST_FAQ_BLUEPRINT,
+      now: NOW,
+    });
+
+    expect(stillUnclear.response.text).toMatch(/reply with your appointment id|just say "new"/i);
+    expect((stillUnclear.state.context as ConciergeContext).pendingBookingAmbiguity).toBeDefined();
+    expect(calendarProvider.createBookingCalls).toHaveLength(1);
+    expect(calendarProvider.updateBookingCalls).toHaveLength(0);
+  });
+
+  it("does not trigger the ambiguity prompt for a chatter with no existing booking — a bare date is unambiguously a fresh booking", async () => {
+    const calendarProvider = fullyAvailableCalendarProvider();
+    const result = await handleMessage({
+      message: makeMessage({ text: "Tuesday works for me" }),
+      state: makeDisclosedState(),
+      businessConfig: TEST_BUSINESS_CONFIG,
+      calendarProvider,
+      aiProvider: fakeAiProviderAnswering("unused"),
+      faqBlueprint: TEST_FAQ_BLUEPRINT,
+      now: NOW,
+    });
+    expect(result.response.quickReplies).toHaveLength(3);
+    expect((result.state.context as ConciergeContext).pendingBookingAmbiguity).toBeUndefined();
+  });
+
+  it("does not trigger the ambiguity prompt when the message has an explicit booking keyword, even with an existing lastAppointmentId", async () => {
+    const calendarProvider = fullyAvailableCalendarProvider();
+    const aiProvider = fakeAiProviderAnswering("unused");
+    const { state: afterBooking } = await bookInitialAppointment(calendarProvider);
+
+    const result = await handleMessage({
+      message: makeMessage({ text: "book for Tuesday" }),
+      state: afterBooking,
+      businessConfig: TEST_BUSINESS_CONFIG,
+      calendarProvider,
+      aiProvider,
+      faqBlueprint: TEST_FAQ_BLUEPRINT,
+      now: NOW,
+    });
+    expect(result.response.quickReplies).toHaveLength(3);
+    expect((result.state.context as ConciergeContext).pendingBookingAmbiguity).toBeUndefined();
   });
 });
 

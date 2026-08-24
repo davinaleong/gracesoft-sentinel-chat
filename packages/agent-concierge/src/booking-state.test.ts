@@ -127,20 +127,23 @@ function makeState(context: Record<string, unknown> = {}): ConversationState {
 
 describe("withContext", () => {
   it("merges a patch onto the existing context rather than replacing it", () => {
-    const state = makeState({ aiDisclosed: true, lastAppointmentId: "GS-AAAA-1111" });
+    const state = makeState({ aiDisclosedAt: "2026-05-01T09:00:00+08:00", lastAppointmentId: "GS-AAAA-1111" });
     const result = withContext(state, { bookingCandidates: [{ id: "slot-1", start: "s", end: "e" }] });
     const context = result.context as ConciergeContext;
-    expect(context.aiDisclosed).toBe(true);
+    expect(context.aiDisclosedAt).toBe("2026-05-01T09:00:00+08:00");
     expect(context.lastAppointmentId).toBe("GS-AAAA-1111");
     expect(context.bookingCandidates).toHaveLength(1);
   });
 
   it("clears a field only when the patch explicitly sets it to undefined", () => {
-    const state = makeState({ bookingCandidates: [{ id: "slot-1", start: "s", end: "e" }], aiDisclosed: true });
+    const state = makeState({
+      bookingCandidates: [{ id: "slot-1", start: "s", end: "e" }],
+      aiDisclosedAt: "2026-05-01T09:00:00+08:00",
+    });
     const result = withContext(state, { bookingCandidates: undefined });
     const context = result.context as ConciergeContext;
     expect(context.bookingCandidates).toBeUndefined();
-    expect(context.aiDisclosed).toBe(true);
+    expect(context.aiDisclosedAt).toBe("2026-05-01T09:00:00+08:00");
   });
 });
 

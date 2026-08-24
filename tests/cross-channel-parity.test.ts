@@ -111,7 +111,7 @@ function freshState(channel: string, senderId: string): ConversationState {
     agent: "concierge",
     createdAt: new Date().toISOString(),
     updatedAt: new Date().toISOString(),
-    context: { aiDisclosed: true },
+    context: { aiDisclosedAt: new Date().toISOString() },
   };
 }
 

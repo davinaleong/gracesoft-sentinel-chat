@@ -18,7 +18,14 @@ export interface BookingsTodayCounter {
 export interface ConciergeContext {
   bookingCandidates?: BookingCandidate[];
   lastEscalatedMessage?: string;
-  aiDisclosed?: boolean;
+  /**
+   * ISO timestamp of when the AI disclosure was last actually shown.
+   * Compared against `ai_disclosure.redisclosure_after_hours` (not the
+   * session's own TTL) to decide whether to show it again — deliberately a
+   * timestamp, not a boolean, so a conversation kept alive by routine
+   * activity doesn't suppress this compliance requirement forever.
+   */
+  aiDisclosedAt?: string;
   /** Most recent appointment id this chatter (session) has booked — an opportunistic convenience, not an auth guarantee. */
   lastAppointmentId?: string;
   bookingsToday?: BookingsTodayCounter;
@@ -39,12 +46,30 @@ export interface ConciergeContext {
   pendingCancelConfirmationId?: string;
   /** The provider's own booking id for a *located* booking awaiting final "are you sure?" confirmation before it's actually cancelled — cancellation is destructive, so this extra step exists even though reschedule doesn't need one. */
   pendingCancelBookingId?: string;
+  /**
+   * Set when a date/time-only message arrives while the chatter has an
+   * existing `lastAppointmentId` and no explicit booking keyword — it's
+   * genuinely ambiguous whether they mean to move that booking or start a
+   * new one, so this holds the parsed date/time while we ask, rather than
+   * silently guessing (see the regression test for what silently guessing
+   * did: a second, unrelated booking, with the original left untouched and
+   * the chatter never told).
+   *
+   * Deliberately *not* covered by `looksLikeFreshTopic`'s generic escape
+   * hatch (see handleMessageInner) — same reason as `pendingCancelBookingId`:
+   * the word "booking" in the chatter's own expected reply ("new booking")
+   * would itself satisfy `parseBookingRequest(...).hasBookingIntent`,
+   * tripping the escape hatch before this state's own handler ever saw the
+   * reply it was waiting for. `handleBookingVsRescheduleAmbiguity` has full
+   * first-refusal control over its own pending replies instead.
+   */
+  pendingBookingAmbiguity?: { date?: string; time?: string };
   [key: string]: unknown;
 }
 
 /**
  * Merges `patch` onto the existing context rather than replacing it —
- * session-lifetime fields (`aiDisclosed`, `lastAppointmentId`,
+ * session-lifetime fields (`aiDisclosedAt`, `lastAppointmentId`,
  * `bookingsToday`, ...) must survive turns whose own concern is unrelated
  * to them. A field is only actually cleared when a patch explicitly sets it
  * to `undefined` (e.g. `{ bookingCandidates: undefined }` once a booking
