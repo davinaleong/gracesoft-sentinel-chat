@@ -114,9 +114,9 @@ importers:
       '@gracesoft-sentinel/provider-ai-openai':
         specifier: workspace:*
         version: link:../../packages/provider-ai-openai
-      '@gracesoft-sentinel/provider-drive-google':
+      '@gracesoft-sentinel/provider-recipe-pinecone':
         specifier: workspace:*
-        version: link:../../packages/provider-drive-google
+        version: link:../../packages/provider-recipe-pinecone
       '@gracesoft-sentinel/provider-session-redis':
         specifier: workspace:*
         version: link:../../packages/provider-session-redis
@@ -175,9 +175,9 @@ importers:
       '@gracesoft-sentinel/provider-calendar-google':
         specifier: workspace:*
         version: link:../../packages/provider-calendar-google
-      '@gracesoft-sentinel/provider-drive-google':
+      '@gracesoft-sentinel/provider-recipe-pinecone':
         specifier: workspace:*
-        version: link:../../packages/provider-drive-google
+        version: link:../../packages/provider-recipe-pinecone
       '@gracesoft-sentinel/provider-session-redis':
         specifier: workspace:*
         version: link:../../packages/provider-session-redis
@@ -518,12 +518,34 @@ importers:
 
   packages/provider-drive-google:
     dependencies:
-      '@gracesoft-sentinel/core':
-        specifier: workspace:*
-        version: link:../core
       googleapis:
         specifier: ^140.0.0
         version: 140.0.1
+    devDependencies:
+      '@gracesoft-sentinel/config-tsconfig':
+        specifier: workspace:*
+        version: link:../config-tsconfig
+      typescript:
+        specifier: ^5.7.3
+        version: 5.9.3
+      vitest:
+        specifier: ^3.0.4
+        version: 3.2.7
+
+  packages/provider-recipe-pinecone:
+    dependencies:
+      '@gracesoft-sentinel/core':
+        specifier: workspace:*
+        version: link:../core
+      '@gracesoft-sentinel/provider-ai-openai':
+        specifier: workspace:*
+        version: link:../provider-ai-openai
+      '@gracesoft-sentinel/provider-drive-google':
+        specifier: workspace:*
+        version: link:../provider-drive-google
+      '@pinecone-database/pinecone':
+        specifier: ^8.0.0
+        version: 8.2.0
     devDependencies:
       '@gracesoft-sentinel/config-tsconfig':
         specifier: workspace:*
@@ -872,6 +894,10 @@ packages:
   '@nodelib/fs.walk@1.2.8':
     resolution: {integrity: sha512-oGB+UxlgWcgQkgwo8GcEGwemoTFt3FIO9ababBmaGwXIoBKZ+GTy0pP185beGg7Llih/NSHSV2XAs1lnznocSg==}
     engines: {node: '>= 8'}
+
+  '@pinecone-database/pinecone@8.2.0':
+    resolution: {integrity: sha512-4Lzn+Ph4Lmf8ZEm2Ky1WGgPJJtoMtjSCmsT6bdHpd8nhkUnCQqk/NsbPYglx7irWYJpb2zBE+wehNBfoCeJ6Qw==}
+    engines: {node: '>=20.0.0'}
 
   '@pinojs/redact@0.4.0':
     resolution: {integrity: sha512-k2ENnmBugE/rzQfEcdWHcCY+/FM3VLzH9cYEsbdsoqrvzAKRhUZeRNhAZvB8OitQJ1TBed3yqWtdjzS6wJKBwg==}
@@ -2917,6 +2943,8 @@ snapshots:
     dependencies:
       '@nodelib/fs.scandir': 2.1.5
       fastq: 1.20.1
+
+  '@pinecone-database/pinecone@8.2.0': {}
 
   '@pinojs/redact@0.4.0': {}
 

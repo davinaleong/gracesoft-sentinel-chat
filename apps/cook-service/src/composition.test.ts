@@ -28,13 +28,8 @@ describe("buildComposition — cook-service", () => {
     expect(composition.readinessCheck).toBeInstanceOf(Function);
   });
 
-  it("also wires the opt-in Mother's Day Edition (Google Drive recipe retrieval) without throwing when configured", () => {
-    const composition = buildComposition({
-      ...env,
-      GOOGLE_DRIVE_RECIPES_FOLDER_ID: "folder-1",
-      GOOGLE_SERVICE_ACCOUNT_EMAIL: "svc@example.iam.gserviceaccount.com",
-      GOOGLE_SERVICE_ACCOUNT_PRIVATE_KEY: "-----BEGIN PRIVATE KEY-----\\nabc\\n-----END PRIVATE KEY-----\\n",
-    });
+  it("also wires the opt-in Mother's Day Edition (Pinecone recipe retrieval) without throwing when configured", () => {
+    const composition = buildComposition({ ...env, PINECONE_INDEX_NAME: "recipes", PINECONE_API_KEY: "pc-test" });
     expect(composition.onMessage).toBeInstanceOf(Function);
   });
 });

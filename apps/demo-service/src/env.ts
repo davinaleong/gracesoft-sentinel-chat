@@ -40,15 +40,17 @@ export const DemoServiceEnvSchema = z
     DEMO_DEFAULT_AGENT: z.enum(["concierge", "cook"]).default("concierge"),
 
     /**
-     * "Mother's Day Edition" (opt-in): personal recipe retrieval via RAG
-     * over a Google Drive folder, for the Cook half. Reuses the same
-     * GOOGLE_SERVICE_ACCOUNT_EMAIL/PRIVATE_KEY already required above for
-     * Calendar — one service account, two different OAuth-scoped clients
-     * (calendar vs. drive.readonly), no separate credential needed. Unlike
-     * cook-service, no conditional-requirement check is needed here since
-     * those two vars are already unconditionally required by this schema.
+     * "Mother's Day Edition" (opt-in): personal recipe retrieval via RAG,
+     * queried from a Pinecone index, for the Cook half. This service only
+     * queries the index — it's populated ahead of time by
+     * `provider-recipe-pinecone`'s own Drive→Pinecone sync job, run
+     * out-of-band. Unset by default; when PINECONE_INDEX_NAME is set,
+     * PINECONE_API_KEY becomes required too.
      */
-    GOOGLE_DRIVE_RECIPES_FOLDER_ID: z.string().optional(),
+    PINECONE_API_KEY: z.string().optional(),
+    PINECONE_INDEX_NAME: z.string().optional(),
+    /** Keeps recipe vectors isolated from anything else sharing the same index — recommended, not required. */
+    PINECONE_NAMESPACE: z.string().optional(),
 
     WHATSAPP_ENABLED: booleanFromEnvString,
     WHATSAPP_PHONE_NUMBER_ID: z.string().optional(),
@@ -73,6 +75,9 @@ export const DemoServiceEnvSchema = z
     }
     if (!env.WHATSAPP_ENABLED && !env.TELEGRAM_ENABLED) {
       ctx.addIssue({ code: "custom", path: ["WHATSAPP_ENABLED"], message: "At least one of WHATSAPP_ENABLED or TELEGRAM_ENABLED must be true" });
+    }
+    if (env.PINECONE_INDEX_NAME && !env.PINECONE_API_KEY) {
+      ctx.addIssue({ code: "custom", path: ["PINECONE_API_KEY"], message: "PINECONE_API_KEY is required when PINECONE_INDEX_NAME is set" });
     }
   });
 

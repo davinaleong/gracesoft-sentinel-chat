@@ -82,4 +82,28 @@ describe("loadEnv", () => {
       loadEnv({ ...rest, TELEGRAM_ENABLED: "true", TELEGRAM_BOT_TOKEN: "t", TELEGRAM_WEBHOOK_SECRET: "s" } as unknown as NodeJS.ProcessEnv)
     ).toThrow(/BUSINESS_CONFIG_PATH/);
   });
+
+  it("throws when PINECONE_INDEX_NAME is set but PINECONE_API_KEY is missing", () => {
+    expect(() =>
+      loadEnv({
+        ...BASE_ENV,
+        TELEGRAM_ENABLED: "true",
+        TELEGRAM_BOT_TOKEN: "t",
+        TELEGRAM_WEBHOOK_SECRET: "s",
+        PINECONE_INDEX_NAME: "recipes",
+      } as unknown as NodeJS.ProcessEnv)
+    ).toThrow(/PINECONE_API_KEY is required/);
+  });
+
+  it("loads successfully with the Mother's Day Edition fully configured", () => {
+    const env = loadEnv({
+      ...BASE_ENV,
+      TELEGRAM_ENABLED: "true",
+      TELEGRAM_BOT_TOKEN: "t",
+      TELEGRAM_WEBHOOK_SECRET: "s",
+      PINECONE_INDEX_NAME: "recipes",
+      PINECONE_API_KEY: "pc-test",
+    } as unknown as NodeJS.ProcessEnv);
+    expect(env.PINECONE_INDEX_NAME).toBe("recipes");
+  });
 });

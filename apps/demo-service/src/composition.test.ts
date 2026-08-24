@@ -40,8 +40,8 @@ describe("buildComposition — demo-service", () => {
     expect(() => buildComposition({ ...env, BUSINESS_CONFIG_PATH: "./does-not-exist.json" })).toThrow();
   });
 
-  it("also wires the opt-in Mother's Day Edition (Google Drive recipe retrieval) without throwing when configured", () => {
-    const composition = buildComposition({ ...env, GOOGLE_DRIVE_RECIPES_FOLDER_ID: "folder-1" });
+  it("also wires the opt-in Mother's Day Edition (Pinecone recipe retrieval) without throwing when configured", () => {
+    const composition = buildComposition({ ...env, PINECONE_INDEX_NAME: "recipes", PINECONE_API_KEY: "pc-test" });
     expect(composition.onMessage).toBeInstanceOf(Function);
   });
 });

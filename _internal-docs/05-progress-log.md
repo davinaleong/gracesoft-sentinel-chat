@@ -4,6 +4,26 @@ Companion to `01-milestone-checklist.md`. One entry per work session, newest fir
 
 ---
 
+## 2026-08-24 — Mother's Day Edition: refactor from in-memory Drive RAG to a Pinecone index
+
+**Status:** Requested refactor of an already-shipped Milestone 11 feature — recipes are now retrieved from Pinecone at chat time, not by rebuilding an in-memory index from Google Drive on every process.
+
+**Why:** the original `GoogleDriveRecipeProvider` listed the whole Drive folder, downloaded every document, and re-embedded all of it into an in-memory `RecipeEmbeddingsIndex` — the first time any process needed it, and again on every fresh process (no shared state across replicas). Fine for a demo with one instance and a handful of documents; doesn't hold up once there's more than one running instance, or if the recipe folder ever gets large. A real vector index makes retrieval a plain query, and separates "index maintenance" (occasional, batch) from "query" (every chat message).
+
+**What changed:**
+- **`provider-drive-google` trimmed to pure Drive I/O.** Removed `GoogleDriveRecipeProvider` and `RecipeEmbeddingsIndex` entirely — this package no longer implements `RecipeSourceProvider` or touches `AIProvider` at all. What's left: the `GoogleDriveClient` wrapper plus a new exported `listRecipeDocuments(client, folderId)` (the file-listing/Google-Docs-export logic that used to live inline in the old provider, now a reusable building block). Dropped the now-unused `@gracesoft-sentinel/core` dependency.
+- **New package `provider-recipe-pinecone`.** `createPineconeClient()` wraps the real `@pinecone-database/pinecone` SDK behind our own minimal `PineconeClient` interface (`query`/`upsert`) — unlike the REST-ish clients elsewhere in this repo (`googleapis`, Twilio), Pinecone's SDK doesn't structurally cast onto a flat interface (namespace scoping is method-chained, `upsert` takes `{records, namespace}`), so this one wraps the SDK object internally instead of casting it. `PineconeRecipeProvider implements RecipeSourceProvider` — embeds the query via the injected `AIProvider.embed`, queries Pinecone, maps matches' `metadata.title`/`metadata.content` back to `RecipeSourceResult`. `syncDriveRecipesToPinecone()` is the ingestion half: reads a Drive folder via `provider-drive-google`'s `listRecipeDocuments`, embeds each document, upserts into Pinecone keyed by Drive file id (safe to re-run — an edit just overwrites its own vector). `sync-cli.ts` is a runnable entry point (`pnpm --filter @gracesoft-sentinel/provider-recipe-pinecone run sync`) reading its own env vars, meant to run out-of-band — not invoked by any service automatically.
+- **`cook-service`/`demo-service` composition swapped** `GoogleDriveRecipeProvider`/`GOOGLE_DRIVE_RECIPES_FOLDER_ID` for `PineconeRecipeProvider`/`PINECONE_INDEX_NAME` (+ `PINECONE_API_KEY`, optional `PINECONE_NAMESPACE`). Same opt-in shape as before — unset, and `agent-cook`'s `recipeSourceProvider` param is `undefined`, behavior unchanged. `agent-cook` itself needed zero changes: it only ever depended on the `RecipeSourceProvider` interface, never the concrete Drive implementation, so swapping which provider the composition root constructs is exactly the kind of change this architecture exists to make cheap.
+- **Docs updated**: `README.md`, `docs/contracts.html`, `docs/getting-started.html` all reflect the new package/env vars and the query-vs-ingest split.
+
+**Verified locally (all green):** `pnpm lint`, `pnpm typecheck`, `pnpm boundaries` (0 violations, 567 modules/1248 dependencies), `pnpm build`, `pnpm test` — full workspace green including 6 tests in the trimmed `provider-drive-google` (was testing the removed provider/index; now tests `listRecipeDocuments` directly) and 11 new tests in `provider-recipe-pinecone` (client construction, provider query behavior including a custom `topK` and missing-metadata degradation, and the sync job including a round-trip "synced recipes are then queryable" test). `pnpm test:integration` green (3 tests).
+
+**Nothing deferred to the user for the code itself** — everything is unit-tested against fakes, no live Pinecone/Drive/OpenAI credentials needed. What *does* need the user: an actual Pinecone account/index and API key to run this for real, and running the sync job at least once (nothing populates the index automatically).
+
+**Next:** nothing outstanding — this was a refactor of an already-complete milestone item, not new milestone scope.
+
+---
+
 ## 2026-08-18 — Milestone 11 (6/6): Mother's Day Edition — personal recipe RAG
 
 **Status:** Six of six optional/future items done — Milestone 11, and both checklists, are now complete: every remaining item on `01-milestone-checklist.md` and `02-test-checklist.md` is either checked or explicitly annotated as blocked on something this environment doesn't have (live hosting, live credentials, a real WhatsApp Business/Telegram account for manual E2E validation).

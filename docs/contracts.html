@@ -157,7 +157,8 @@
     <pre><code>interface RecipeSourceProvider {
   findRecipes(input: { query: string }): Promise&lt;{ id: string; title: string; raw?: unknown }[]&gt;;
 }</code></pre>
-    <p>Implemented by <code>provider-drive-google</code> — retrieves a personal recipe from a Google Drive folder via embeddings-based semantic search (RAG) rather than AI generation. Optional: <code>agent-cook</code> only takes this path when a provider is actually configured (<code>GOOGLE_DRIVE_RECIPES_FOLDER_ID</code>), and the matched document's content is returned verbatim — it's the user's own free text, not a structured recipe.</p>
+    <p>Implemented by <code>provider-recipe-pinecone</code> — retrieves a personal recipe via embeddings-based semantic search (RAG) against a Pinecone index, rather than AI generation. Optional: <code>agent-cook</code> only takes this path when a provider is actually configured (<code>PINECONE_INDEX_NAME</code>), and the matched document's content is returned verbatim — it's the user's own free text, not a structured recipe.</p>
+    <p>The index itself is populated separately, ahead of time, by the same package's Drive→Pinecone sync job (<code>syncDriveRecipesToPinecone</code>, run out-of-band via <code>pnpm --filter @gracesoft-sentinel/provider-recipe-pinecone run sync</code>) — the running service only ever queries Pinecone at chat time, it never lists or embeds a Drive folder inline. That sync job is the one place <code>provider-drive-google</code> (Drive file listing/download only, no RAG logic of its own) still gets used.</p>
 
     <div class="footer-nav">
       <span><span class="label">Previous</span><a href="webhooks.html">← Webhooks &amp; endpoints</a></span>

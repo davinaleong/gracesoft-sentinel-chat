@@ -26,13 +26,15 @@ export const CookServiceEnvSchema = z
 
     /**
      * "Mother's Day Edition" (Milestone 11), fully opt-in — personal recipe
-     * retrieval via RAG over a Google Drive folder. Unset by default; when
-     * GOOGLE_DRIVE_RECIPES_FOLDER_ID is set, the two service-account vars
-     * become required too.
+     * retrieval via RAG, queried from a Pinecone index at chat time
+     * (populated ahead of time by `provider-recipe-pinecone`'s Drive→Pinecone
+     * sync job, run out-of-band — not by this service). Unset by default;
+     * when PINECONE_INDEX_NAME is set, PINECONE_API_KEY becomes required too.
      */
-    GOOGLE_SERVICE_ACCOUNT_EMAIL: z.string().optional(),
-    GOOGLE_SERVICE_ACCOUNT_PRIVATE_KEY: z.string().optional(),
-    GOOGLE_DRIVE_RECIPES_FOLDER_ID: z.string().optional(),
+    PINECONE_API_KEY: z.string().optional(),
+    PINECONE_INDEX_NAME: z.string().optional(),
+    /** Keeps recipe vectors isolated from anything else sharing the same index — recommended, not required. */
+    PINECONE_NAMESPACE: z.string().optional(),
 
     WHATSAPP_ENABLED: booleanFromEnvString,
     WHATSAPP_PHONE_NUMBER_ID: z.string().optional(),
@@ -58,10 +60,8 @@ export const CookServiceEnvSchema = z
     if (!env.WHATSAPP_ENABLED && !env.TELEGRAM_ENABLED) {
       ctx.addIssue({ code: "custom", path: ["WHATSAPP_ENABLED"], message: "At least one of WHATSAPP_ENABLED or TELEGRAM_ENABLED must be true" });
     }
-    if (env.GOOGLE_DRIVE_RECIPES_FOLDER_ID) {
-      for (const key of ["GOOGLE_SERVICE_ACCOUNT_EMAIL", "GOOGLE_SERVICE_ACCOUNT_PRIVATE_KEY"] as const) {
-        if (!env[key]) ctx.addIssue({ code: "custom", path: [key], message: `${key} is required when GOOGLE_DRIVE_RECIPES_FOLDER_ID is set` });
-      }
+    if (env.PINECONE_INDEX_NAME && !env.PINECONE_API_KEY) {
+      ctx.addIssue({ code: "custom", path: ["PINECONE_API_KEY"], message: "PINECONE_API_KEY is required when PINECONE_INDEX_NAME is set" });
     }
   });
 

@@ -40,16 +40,16 @@ describe("loadEnv", () => {
     );
   });
 
-  it("throws when GOOGLE_DRIVE_RECIPES_FOLDER_ID is set but the Google service account vars are missing", () => {
+  it("throws when PINECONE_INDEX_NAME is set but PINECONE_API_KEY is missing", () => {
     expect(() =>
       loadEnv({
         ...BASE_ENV,
         TELEGRAM_ENABLED: "true",
         TELEGRAM_BOT_TOKEN: "t",
         TELEGRAM_WEBHOOK_SECRET: "s",
-        GOOGLE_DRIVE_RECIPES_FOLDER_ID: "folder-1",
+        PINECONE_INDEX_NAME: "recipes",
       } as unknown as NodeJS.ProcessEnv)
-    ).toThrow(/GOOGLE_SERVICE_ACCOUNT_EMAIL is required/);
+    ).toThrow(/PINECONE_API_KEY is required/);
   });
 
   it("loads successfully with the Mother's Day Edition fully configured", () => {
@@ -58,10 +58,9 @@ describe("loadEnv", () => {
       TELEGRAM_ENABLED: "true",
       TELEGRAM_BOT_TOKEN: "t",
       TELEGRAM_WEBHOOK_SECRET: "s",
-      GOOGLE_DRIVE_RECIPES_FOLDER_ID: "folder-1",
-      GOOGLE_SERVICE_ACCOUNT_EMAIL: "svc@example.iam.gserviceaccount.com",
-      GOOGLE_SERVICE_ACCOUNT_PRIVATE_KEY: "key",
+      PINECONE_INDEX_NAME: "recipes",
+      PINECONE_API_KEY: "pc-test",
     } as unknown as NodeJS.ProcessEnv);
-    expect(env.GOOGLE_DRIVE_RECIPES_FOLDER_ID).toBe("folder-1");
+    expect(env.PINECONE_INDEX_NAME).toBe("recipes");
   });
 });

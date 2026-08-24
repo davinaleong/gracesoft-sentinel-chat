@@ -2,7 +2,7 @@ import { OpenAIProvider } from "@gracesoft-sentinel/provider-ai-openai";
 import { RedisRateLimiter, RedisSessionStore, createRedisClient } from "@gracesoft-sentinel/provider-session-redis";
 import { PostgresConversationLogger, createPgClient } from "@gracesoft-sentinel/logging-postgres";
 import { createLogger, type Logger } from "@gracesoft-sentinel/logging";
-import { GoogleDriveRecipeProvider, createGoogleDriveClient } from "@gracesoft-sentinel/provider-drive-google";
+import { PineconeRecipeProvider, createPineconeClient } from "@gracesoft-sentinel/provider-recipe-pinecone";
 import type { AIProvider, NormalizedMessage, NormalizedResponse, RecipeSourceProvider } from "@gracesoft-sentinel/core";
 import { createOnMessageHandler } from "./on-message.js";
 import type { CookServiceEnv } from "./env.js";
@@ -14,20 +14,23 @@ export interface Composition {
 }
 
 /**
- * "Mother's Day Edition" (Milestone 11) — fully opt-in. Only constructed
- * when GOOGLE_DRIVE_RECIPES_FOLDER_ID is set (env.ts's superRefine already
- * guarantees the Google service-account vars are present whenever it is);
- * every other deployment gets `undefined` and agent-cook's photo-based flow
- * is entirely unaffected.
+ * "Mother's Day Edition" (Milestone 11) — fully opt-in, query-time only.
+ * Only constructed when PINECONE_INDEX_NAME is set (env.ts's superRefine
+ * already guarantees PINECONE_API_KEY is present whenever it is); every
+ * other deployment gets `undefined` and agent-cook's photo-based flow is
+ * entirely unaffected. The index itself is populated separately, ahead of
+ * time, by `provider-recipe-pinecone`'s Drive→Pinecone sync job — this
+ * service only ever queries it, never lists/embeds a Drive folder inline.
  */
 function buildRecipeSourceProvider(env: CookServiceEnv, aiProvider: AIProvider): RecipeSourceProvider | undefined {
-  if (!env.GOOGLE_DRIVE_RECIPES_FOLDER_ID) return undefined;
+  if (!env.PINECONE_INDEX_NAME) return undefined;
 
-  const client = createGoogleDriveClient({
-    serviceAccountEmail: env.GOOGLE_SERVICE_ACCOUNT_EMAIL!,
-    privateKey: env.GOOGLE_SERVICE_ACCOUNT_PRIVATE_KEY!,
+  const client = createPineconeClient({
+    apiKey: env.PINECONE_API_KEY!,
+    indexName: env.PINECONE_INDEX_NAME,
+    namespace: env.PINECONE_NAMESPACE,
   });
-  return new GoogleDriveRecipeProvider({ client, aiProvider, folderId: env.GOOGLE_DRIVE_RECIPES_FOLDER_ID });
+  return new PineconeRecipeProvider({ client, aiProvider });
 }
 
 /** The composition root: wires agent-cook to every provider and persistence layer, purely from env. */

@@ -30,7 +30,8 @@ packages/
   provider-ai-gemini/            AIProvider: Google Gemini
   provider-calendar-google/      CalendarProvider: Google Calendar
   provider-session-redis/        SessionStore: Redis
-  provider-drive-google/         RecipeSourceProvider: personal recipe retrieval via RAG over Google Drive
+  provider-recipe-pinecone/      RecipeSourceProvider: personal recipe retrieval via RAG, queried from Pinecone
+  provider-drive-google/         Drive I/O only — feeds provider-recipe-pinecone's Drive→Pinecone sync job
 
   logging/                       Structured logging (pino) + PII redaction
   logging-postgres/               Conversation/booking audit logging to Postgres

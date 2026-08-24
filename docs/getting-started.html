@@ -89,10 +89,12 @@ cp apps/cook-service/.env.example apps/cook-service/.env</code></pre>
         <tr><td><code>OPENAI_API_KEY</code>, <code>OPENAI_MODEL</code>, <code>OPENAI_VISION_MODEL</code></td><td>Key required, models optional</td><td></td></tr>
         <tr><td><code>REDIS_URL</code>, <code>DATABASE_URL</code></td><td>Yes</td><td></td></tr>
         <tr><td><code>WHATSAPP_ENABLED</code> / <code>TELEGRAM_ENABLED</code> + their vars</td><td>Conditional, at least one</td><td>Same rules as concierge-service</td></tr>
-        <tr><td><code>GOOGLE_DRIVE_RECIPES_FOLDER_ID</code></td><td>No — opt-in</td><td>"Mother's Day Edition": personal recipe retrieval via RAG over a Drive folder</td></tr>
-        <tr><td><code>GOOGLE_SERVICE_ACCOUNT_EMAIL</code>, <code>GOOGLE_SERVICE_ACCOUNT_PRIVATE_KEY</code></td><td>Required only if the folder id above is set</td><td>Drive read-only access</td></tr>
+        <tr><td><code>PINECONE_INDEX_NAME</code></td><td>No — opt-in</td><td>"Mother's Day Edition": personal recipe retrieval via RAG, queried from Pinecone</td></tr>
+        <tr><td><code>PINECONE_API_KEY</code></td><td>Required only if <code>PINECONE_INDEX_NAME</code> is set</td><td></td></tr>
+        <tr><td><code>PINECONE_NAMESPACE</code></td><td>No</td><td>Optional — isolates recipe vectors within a shared index</td></tr>
       </tbody>
     </table>
+    <div class="callout">cook-service only <em>queries</em> the Pinecone index — it doesn't populate it. Run <code>pnpm --filter @gracesoft-sentinel/provider-recipe-pinecone run sync</code> first (its own env: <code>GOOGLE_SERVICE_ACCOUNT_EMAIL</code>/<code>PRIVATE_KEY</code>, <code>GOOGLE_DRIVE_RECIPES_FOLDER_ID</code>, <code>OPENAI_API_KEY</code>, plus the three Pinecone vars above) to (re)index a Drive folder of personal recipes.</div>
 
     <h2>Run a service</h2>
     <pre><code>pnpm --filter @gracesoft-sentinel/concierge-service build

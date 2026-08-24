@@ -1,5 +1,5 @@
 {
-  "name": "@gracesoft-sentinel/provider-drive-google",
+  "name": "@gracesoft-sentinel/provider-recipe-pinecone",
   "version": "0.1.0",
   "private": true,
   "license": "SEE LICENSE IN LICENSE",
@@ -19,10 +19,14 @@
     "build": "tsc -b",
     "typecheck": "tsc -b --emitDeclarationOnly false --noEmit",
     "test": "vitest run",
-    "lint": "eslint ."
+    "lint": "eslint .",
+    "sync": "node dist/sync-cli.js"
   },
   "dependencies": {
-    "googleapis": "^140.0.0"
+    "@gracesoft-sentinel/core": "workspace:*",
+    "@gracesoft-sentinel/provider-ai-openai": "workspace:*",
+    "@gracesoft-sentinel/provider-drive-google": "workspace:*",
+    "@pinecone-database/pinecone": "^8.0.0"
   },
   "devDependencies": {
     "@gracesoft-sentinel/config-tsconfig": "workspace:*",

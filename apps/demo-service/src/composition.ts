@@ -1,6 +1,6 @@
 import { OpenAIProvider } from "@gracesoft-sentinel/provider-ai-openai";
 import { GoogleCalendarProvider, createGoogleCalendarClient } from "@gracesoft-sentinel/provider-calendar-google";
-import { GoogleDriveRecipeProvider, createGoogleDriveClient } from "@gracesoft-sentinel/provider-drive-google";
+import { PineconeRecipeProvider, createPineconeClient } from "@gracesoft-sentinel/provider-recipe-pinecone";
 import { RedisRateLimiter, RedisSessionStore, createRedisClient } from "@gracesoft-sentinel/provider-session-redis";
 import { PostgresConversationLogger, createPgClient } from "@gracesoft-sentinel/logging-postgres";
 import { createLogger, type Logger } from "@gracesoft-sentinel/logging";
@@ -20,22 +20,22 @@ export interface Composition {
 const RATE_LIMITED_MESSAGE = "You're sending messages a bit quickly — please wait a moment and try again.";
 
 /**
- * "Mother's Day Edition" (Milestone 11) — fully opt-in, mirrors
- * cook-service's own `buildRecipeSourceProvider`. Only constructed when
- * GOOGLE_DRIVE_RECIPES_FOLDER_ID is set; every other demo-service run gets
- * `undefined` and Cook's photo-based flow is entirely unaffected. Reuses
- * the same service-account credentials env.ts already requires for
- * Calendar — `createGoogleDriveClient` builds its own separately-scoped
- * (drive.readonly) JWT client from them, independent of the calendar one.
+ * "Mother's Day Edition" (Milestone 11) — fully opt-in, query-time only,
+ * mirrors cook-service's own `buildRecipeSourceProvider`. Only constructed
+ * when PINECONE_INDEX_NAME is set; every other demo-service run gets
+ * `undefined` and Cook's photo-based flow is entirely unaffected. The
+ * index itself is populated separately, ahead of time, by
+ * `provider-recipe-pinecone`'s Drive→Pinecone sync job.
  */
 function buildRecipeSourceProvider(env: DemoServiceEnv, aiProvider: AIProvider): RecipeSourceProvider | undefined {
-  if (!env.GOOGLE_DRIVE_RECIPES_FOLDER_ID) return undefined;
+  if (!env.PINECONE_INDEX_NAME) return undefined;
 
-  const client = createGoogleDriveClient({
-    serviceAccountEmail: env.GOOGLE_SERVICE_ACCOUNT_EMAIL,
-    privateKey: env.GOOGLE_SERVICE_ACCOUNT_PRIVATE_KEY,
+  const client = createPineconeClient({
+    apiKey: env.PINECONE_API_KEY!,
+    indexName: env.PINECONE_INDEX_NAME,
+    namespace: env.PINECONE_NAMESPACE,
   });
-  return new GoogleDriveRecipeProvider({ client, aiProvider, folderId: env.GOOGLE_DRIVE_RECIPES_FOLDER_ID });
+  return new PineconeRecipeProvider({ client, aiProvider });
 }
 
 /**
