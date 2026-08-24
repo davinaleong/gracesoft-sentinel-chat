@@ -316,6 +316,7 @@ Let one chat window demo both Concierge and Cook — useful for live demos and s
 * `apps/demo-service` — single-tenant composition root wiring `agent-concierge` (OpenAI + Google Calendar) and `agent-cook` (OpenAI) side by side behind the switcher, one shared Redis-backed `SessionStore`/rate limiter, Postgres logging tagged with the correct agent name per turn
 * Each agent's own conversation state survives independently across switches — a booking in progress on Concierge isn't disturbed by a detour to Cook and back
 * `docker-compose.yml` entry (port 3003), `.env.example` documenting that this needs its own dedicated bot/number distinct from the standalone services
+* `@gracesoft-sentinel/legal-demo` — Privacy Policy + T&C covering both halves it demos, served by `apps/legal-site` at `/demo/privacy`/`/demo/terms`, same structure as `legal-concierge`/`legal-cook`
 
 ### Checklist
 * [x] Scaffold `@gracesoft-sentinel/agent-switcher` package
@@ -323,6 +324,9 @@ Let one chat window demo both Concierge and Cook — useful for live demos and s
 * [x] Scaffold `apps/demo-service`, wiring both agents through the switcher
 * [x] Local Docker smoke test: container builds, `/health`/`/ready` green against real Redis/Postgres, a synthetic Telegram update correctly triggers a switch
 * [x] Confirm zero imports between `agent-concierge`/`agent-cook`, and zero cross-app imports from `apps/concierge-service`/`apps/cook-service` (boundary lint)
+* [x] Draft `@gracesoft-sentinel/legal-demo` Privacy Policy + T&C, wired into `apps/legal-site`
+* [ ] Set up a dedicated demo Google Calendar (rather than reusing the real business calendar) — open question, not yet decided
+* [ ] Create a dedicated Telegram bot (and/or WhatsApp number) for the demo — needed before this can actually be used live
 
 ---
 

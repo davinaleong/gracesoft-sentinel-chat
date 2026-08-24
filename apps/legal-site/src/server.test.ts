@@ -3,6 +3,7 @@ import type { AddressInfo } from "node:net";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { loadPrivacyPolicy as loadConciergePrivacy, loadTerms as loadConciergeTerms } from "@gracesoft-sentinel/legal-concierge";
 import { loadPrivacyPolicy as loadCookPrivacy, loadTerms as loadCookTerms } from "@gracesoft-sentinel/legal-cook";
+import { loadPrivacyPolicy as loadDemoPrivacy, loadTerms as loadDemoTerms } from "@gracesoft-sentinel/legal-demo";
 import { buildServer } from "./server.js";
 
 let server: Server;
@@ -37,6 +38,8 @@ describe("legal-site — reachability", () => {
     ["/concierge/terms"],
     ["/cook/privacy"],
     ["/cook/terms"],
+    ["/demo/privacy"],
+    ["/demo/terms"],
   ])("%s returns 200 HTML, unauthenticated, with no auth header sent", async (path) => {
     const res = await fetch(`${baseUrl}${path}`);
     expect(res.status).toBe(200);
@@ -76,8 +79,24 @@ describe("legal-site — content correctness", () => {
     expect(html).toContain(doc.effectiveDate);
   });
 
+  it("Demo Privacy Policy route matches the current legal-demo content", async () => {
+    const res = await fetch(`${baseUrl}/demo/privacy`);
+    const html = await res.text();
+    const doc = loadDemoPrivacy();
+    expect(html).toContain(doc.effectiveDate);
+    expect(html).toContain(doc.version);
+    expect(html).toContain("Sentinel Demo");
+  });
+
+  it("Demo T&C route matches the current legal-demo content", async () => {
+    const res = await fetch(`${baseUrl}/demo/terms`);
+    const html = await res.text();
+    const doc = loadDemoTerms();
+    expect(html).toContain(doc.effectiveDate);
+  });
+
   it("effective date/version render correctly on every legal page", async () => {
-    for (const path of ["/concierge/privacy", "/concierge/terms", "/cook/privacy", "/cook/terms"]) {
+    for (const path of ["/concierge/privacy", "/concierge/terms", "/cook/privacy", "/cook/terms", "/demo/privacy", "/demo/terms"]) {
       const res = await fetch(`${baseUrl}${path}`);
       const html = await res.text();
       expect(html).toMatch(/Effective date/i);
@@ -103,5 +122,21 @@ describe("legal-site — no cross-contamination", () => {
       expect(html).not.toContain("Sentinel Concierge");
       expect(html).not.toMatch(/booking/i);
     }
+  });
+
+  it("Concierge and Cook routes never render Demo-specific content (e.g. the demo/demonstration disclaimer)", async () => {
+    const pages = await Promise.all(
+      ["/concierge/privacy", "/concierge/terms", "/cook/privacy", "/cook/terms"].map((path) => fetch(`${baseUrl}${path}`).then((r) => r.text()))
+    );
+    for (const html of pages) {
+      expect(html).not.toContain("Sentinel Demo");
+      expect(html).not.toMatch(/demonstration environment/i);
+    }
+  });
+
+  it("Demo routes legitimately mention both Sentinel Concierge and Sentinel Cook, unlike either's own dedicated page", async () => {
+    const privacy = await (await fetch(`${baseUrl}/demo/privacy`)).text();
+    expect(privacy).toContain("Sentinel Concierge");
+    expect(privacy).toContain("Sentinel Cook");
   });
 });

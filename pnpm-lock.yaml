@@ -209,6 +209,9 @@ importers:
       '@gracesoft-sentinel/legal-cook':
         specifier: workspace:*
         version: link:../../packages/legal-cook
+      '@gracesoft-sentinel/legal-demo':
+        specifier: workspace:*
+        version: link:../../packages/legal-demo
       express:
         specifier: ^4.19.2
         version: 4.22.2
@@ -392,6 +395,18 @@ importers:
         version: 3.2.7
 
   packages/legal-cook:
+    devDependencies:
+      '@gracesoft-sentinel/config-tsconfig':
+        specifier: workspace:*
+        version: link:../config-tsconfig
+      typescript:
+        specifier: ^5.7.3
+        version: 5.9.3
+      vitest:
+        specifier: ^3.0.4
+        version: 3.2.7
+
+  packages/legal-demo:
     devDependencies:
       '@gracesoft-sentinel/config-tsconfig':
         specifier: workspace:*

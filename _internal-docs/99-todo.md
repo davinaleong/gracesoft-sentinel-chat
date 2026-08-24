@@ -6,3 +6,4 @@
 - [ ] Feature: Slack Adapter
 - [ ] Feature: Link Adapter
 - [ ] Feature: User Data Deletion
+- [ ] Demo: Service map

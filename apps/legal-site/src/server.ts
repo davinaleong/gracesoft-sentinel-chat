@@ -3,6 +3,7 @@ import { fileURLToPath } from "node:url";
 import express, { type Express } from "express";
 import * as legalConcierge from "@gracesoft-sentinel/legal-concierge";
 import * as legalCook from "@gracesoft-sentinel/legal-cook";
+import * as legalDemo from "@gracesoft-sentinel/legal-demo";
 import { renderLegalPage } from "./render.js";
 
 // `assets/` sits alongside `src`/`dist` (not inside either), since it's a
@@ -15,9 +16,9 @@ const FAVICON_PATH = join(dirname(fileURLToPath(import.meta.url)), "..", "assets
  * Renders each agent's Privacy Policy/T&C at its own public route. No auth,
  * no client-side rendering — Meta/Telegram's verification crawlers (and
  * anyone else) must be able to fetch these unauthenticated. Deliberately
- * has zero dependency on `concierge-service`/`cook-service` — it's a
- * separate, independently deployable app, so taking either service down
- * never takes the legal pages down with it.
+ * has zero dependency on `concierge-service`/`cook-service`/`demo-service`
+ * — it's a separate, independently deployable app, so taking any one of
+ * them down never takes the legal pages down with it.
  */
 export function buildServer(): Express {
   const app = express();
@@ -44,6 +45,14 @@ export function buildServer(): Express {
 
   app.get("/cook/terms", (_req, res) => {
     res.status(200).type("html").send(renderLegalPage("Sentinel Cook — Terms & Conditions", legalCook.loadTerms()));
+  });
+
+  app.get("/demo/privacy", (_req, res) => {
+    res.status(200).type("html").send(renderLegalPage("Sentinel Demo — Privacy Policy", legalDemo.loadPrivacyPolicy()));
+  });
+
+  app.get("/demo/terms", (_req, res) => {
+    res.status(200).type("html").send(renderLegalPage("Sentinel Demo — Terms & Conditions", legalDemo.loadTerms()));
   });
 
   return app;
