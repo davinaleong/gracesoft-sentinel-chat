@@ -5,3 +5,4 @@
 - [ ] Manual testing of WhatsApp version of GraceSoft Sentinel Chat Cook
 - [ ] Feature: Slack Adapter
 - [ ] Feature: Link Adapter
+- [ ] Feature: User Data Deletion

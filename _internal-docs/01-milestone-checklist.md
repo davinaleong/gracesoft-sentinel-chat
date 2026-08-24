@@ -306,6 +306,26 @@ Replace hand-authored `BusinessConfig`/`businessHours`/FAQ-blueprint JSON files 
 
 ---
 
+# Milestone 14 — Multi-Agent Demo (`agent-switcher`, `demo-service`)
+
+### Goal
+Let one chat window demo both Concierge and Cook — useful for live demos and sales conversations where standing up two separate verified numbers per audience isn't practical. Explicitly a demo tool, not a production multi-agent platform: `agent-concierge` and `agent-cook` remain fully unaware of each other, same boundary discipline as everywhere else in this monorepo.
+
+### Deliverables
+* `@gracesoft-sentinel/agent-switcher` — wraps N independently-composed agents (each an already self-contained `onMessage` callback) behind one `onMessage`, switching which is active per chatter via an exact-match command (`/concierge`, `/cook`) or bare passphrase (`concierge`, `cook`)
+* `apps/demo-service` — single-tenant composition root wiring `agent-concierge` (OpenAI + Google Calendar) and `agent-cook` (OpenAI) side by side behind the switcher, one shared Redis-backed `SessionStore`/rate limiter, Postgres logging tagged with the correct agent name per turn
+* Each agent's own conversation state survives independently across switches — a booking in progress on Concierge isn't disturbed by a detour to Cook and back
+* `docker-compose.yml` entry (port 3003), `.env.example` documenting that this needs its own dedicated bot/number distinct from the standalone services
+
+### Checklist
+* [x] Scaffold `@gracesoft-sentinel/agent-switcher` package
+* [x] Switch-vs-forward core logic, with per-chatter independence and stale-active-agent fallback
+* [x] Scaffold `apps/demo-service`, wiring both agents through the switcher
+* [x] Local Docker smoke test: container builds, `/health`/`/ready` green against real Redis/Postgres, a synthetic Telegram update correctly triggers a switch
+* [x] Confirm zero imports between `agent-concierge`/`agent-cook`, and zero cross-app imports from `apps/concierge-service`/`apps/cook-service` (boundary lint)
+
+---
+
 # Suggested Build Order
 
 1. Milestone 0 — Monorepo foundation
@@ -320,3 +340,4 @@ Replace hand-authored `BusinessConfig`/`businessHours`/FAQ-blueprint JSON files 
 10. Milestone 11 — Future work
 11. Milestone 12 — Chatter-facing timezone labeling
 12. Milestone 13 — No-code setup CLI
+13. Milestone 14 — Multi-agent demo (agent-switcher, demo-service)

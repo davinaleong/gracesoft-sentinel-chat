@@ -143,6 +143,64 @@ importers:
         specifier: ^3.0.4
         version: 3.2.7
 
+  apps/demo-service:
+    dependencies:
+      '@gracesoft-sentinel/agent-concierge':
+        specifier: workspace:*
+        version: link:../../packages/agent-concierge
+      '@gracesoft-sentinel/agent-cook':
+        specifier: workspace:*
+        version: link:../../packages/agent-cook
+      '@gracesoft-sentinel/agent-switcher':
+        specifier: workspace:*
+        version: link:../../packages/agent-switcher
+      '@gracesoft-sentinel/channel-telegram':
+        specifier: workspace:*
+        version: link:../../packages/channel-telegram
+      '@gracesoft-sentinel/channel-whatsapp':
+        specifier: workspace:*
+        version: link:../../packages/channel-whatsapp
+      '@gracesoft-sentinel/core':
+        specifier: workspace:*
+        version: link:../../packages/core
+      '@gracesoft-sentinel/logging':
+        specifier: workspace:*
+        version: link:../../packages/logging
+      '@gracesoft-sentinel/logging-postgres':
+        specifier: workspace:*
+        version: link:../../packages/logging-postgres
+      '@gracesoft-sentinel/provider-ai-openai':
+        specifier: workspace:*
+        version: link:../../packages/provider-ai-openai
+      '@gracesoft-sentinel/provider-calendar-google':
+        specifier: workspace:*
+        version: link:../../packages/provider-calendar-google
+      '@gracesoft-sentinel/provider-session-redis':
+        specifier: workspace:*
+        version: link:../../packages/provider-session-redis
+      express:
+        specifier: ^4.19.2
+        version: 4.22.2
+      express-rate-limit:
+        specifier: ^7.4.1
+        version: 7.5.1(express@4.22.2)
+      zod:
+        specifier: ^3.24.1
+        version: 3.25.76
+    devDependencies:
+      '@gracesoft-sentinel/config-tsconfig':
+        specifier: workspace:*
+        version: link:../../packages/config-tsconfig
+      '@types/express':
+        specifier: ^4.17.21
+        version: 4.17.25
+      typescript:
+        specifier: ^5.7.3
+        version: 5.9.3
+      vitest:
+        specifier: ^3.0.4
+        version: 3.2.7
+
   apps/legal-site:
     dependencies:
       '@gracesoft-sentinel/legal-concierge':
@@ -194,6 +252,22 @@ importers:
         version: 3.2.7
 
   packages/agent-cook:
+    dependencies:
+      '@gracesoft-sentinel/core':
+        specifier: workspace:*
+        version: link:../core
+    devDependencies:
+      '@gracesoft-sentinel/config-tsconfig':
+        specifier: workspace:*
+        version: link:../config-tsconfig
+      typescript:
+        specifier: ^5.7.3
+        version: 5.9.3
+      vitest:
+        specifier: ^3.0.4
+        version: 3.2.7
+
+  packages/agent-switcher:
     dependencies:
       '@gracesoft-sentinel/core':
         specifier: workspace:*
@@ -1385,6 +1459,7 @@ packages:
   eslint@9.39.5:
     resolution: {integrity: sha512-DgZS62aPLXKlnxILS/AYCoRvHaZeXceIzlXPkkGGzJWSow1aEk0lbTlxUSlyjC8jcaKxAdOnTDz+o1JFSBsyjw==}
     engines: {node: ^18.18.0 || ^20.9.0 || >=21.1.0}
+    deprecated: This version is no longer supported. Please see https://eslint.org/version-support for other options.
     hasBin: true
     peerDependencies:
       jiti: '*'

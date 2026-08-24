@@ -61,6 +61,22 @@ services:
       postgres:
         condition: service_healthy
 
+  demo-service:
+    build:
+      context: .
+      dockerfile: apps/demo-service/Dockerfile
+    env_file:
+      - apps/demo-service/.env
+    ports:
+      - "3003:3003"
+    depends_on:
+      redis:
+        condition: service_healthy
+      postgres:
+        condition: service_healthy
+    volumes:
+      - ./_internal-docs/data:/repo/_internal-docs/data:ro
+
   legal-site:
     build:
       context: .

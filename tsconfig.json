@@ -15,6 +15,7 @@
     { "path": "packages/legal-cook" },
     { "path": "packages/logging" },
     { "path": "packages/provider-ai-gemini" },
-    { "path": "packages/channel-sms" }
+    { "path": "packages/channel-sms" },
+    { "path": "packages/agent-switcher" }
   ]
 }
