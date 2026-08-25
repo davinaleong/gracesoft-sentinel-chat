@@ -1,6 +1,6 @@
 import type { AIProvider, ChatCompleteInput, ChatCompleteResult, EmbedInput, EmbedResult, TranscribeAudioInput, TranscribeAudioResult, VisionAnalyzeInput, VisionAnalyzeResult } from "@gracesoft-sentinel/core";
 import type { GoogleDriveClient } from "@gracesoft-sentinel/provider-drive-google";
-import type { PineconeClient, PineconeMatch, PineconeUpsertRecord } from "./pinecone-client.js";
+import type { PineconeClient, PineconeMatch, PineconeRecord, PineconeUpsertRecord } from "./pinecone-client.js";
 
 export interface FakeDriveFile {
   id: string;
@@ -60,6 +60,10 @@ export class FakePineconeClient implements PineconeClient {
       .map(({ record, score }) => ({ id: record.id, score, metadata: record.metadata }));
     return { matches };
   }
+
+  async listAll(): Promise<PineconeRecord[]> {
+    return this.records.map((record) => ({ id: record.id, metadata: record.metadata }));
+  }
 }
 
 function cosineSimilarity(a: number[], b: number[]): number {
@@ -89,10 +93,19 @@ export function fakeEmbed(text: string): number[] {
   return VOCABULARY.map((word) => (lower.includes(word) ? 1 : 0));
 }
 
-/** `AIProvider` stub whose only real behavior is `embed` (via `fakeEmbed`) — every other method is unused here. */
+/**
+ * `AIProvider` stub with real behavior for `embed` (via `fakeEmbed`) and
+ * `chatComplete` (defaults to "yes", i.e. every candidate is relevant —
+ * override via the constructor to test `PineconeRecipeProvider`'s LLM
+ * relevance-verification step rejecting a specific candidate). Every other
+ * method is unused here.
+ */
 export class FakeEmbeddingAiProvider implements AIProvider {
-  async chatComplete(_input: ChatCompleteInput): Promise<ChatCompleteResult> {
-    throw new Error("FakeEmbeddingAiProvider: chatComplete not used by this package");
+  constructor(private readonly chatCompleteImpl?: (input: ChatCompleteInput) => ChatCompleteResult | Promise<ChatCompleteResult>) {}
+
+  async chatComplete(input: ChatCompleteInput): Promise<ChatCompleteResult> {
+    if (this.chatCompleteImpl) return this.chatCompleteImpl(input);
+    return { text: "yes" };
   }
   async visionAnalyze(_input: VisionAnalyzeInput): Promise<VisionAnalyzeResult> {
     throw new Error("FakeEmbeddingAiProvider: visionAnalyze not used by this package");

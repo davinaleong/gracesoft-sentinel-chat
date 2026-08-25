@@ -12,6 +12,11 @@ export interface PineconeUpsertRecord {
   metadata: Record<string, unknown>;
 }
 
+export interface PineconeRecord {
+  id: string;
+  metadata?: Record<string, unknown>;
+}
+
 /**
  * The minimal slice of Pinecone's own SDK this package actually calls —
  * same rationale as every other `create*Client` in this monorepo
@@ -27,6 +32,12 @@ export interface PineconeUpsertRecord {
 export interface PineconeClient {
   query(params: { vector: number[]; topK: number }): Promise<{ matches: PineconeMatch[] }>;
   upsert(records: PineconeUpsertRecord[]): Promise<void>;
+  /**
+   * Every record in the namespace, id+metadata only (no similarity search
+   * involved) — backs "how many recipes do I have"/"list my recipes", where
+   * there's no query to embed, just an enumeration of what's indexed.
+   */
+  listAll(): Promise<PineconeRecord[]>;
 }
 
 export interface PineconeAuthConfig {
@@ -60,6 +71,23 @@ export function createPineconeClient(config: PineconeAuthConfig): PineconeClient
       // to cast here since every caller in this package only ever puts
       // plain strings (title/content) into it.
       await scoped.upsert({ records: records.map((r) => ({ id: r.id, values: r.values, metadata: r.metadata as RecordMetadata })) });
+    },
+    async listAll() {
+      const ids: string[] = [];
+      let paginationToken: string | undefined;
+      do {
+        const page = await scoped.listPaginated({ paginationToken });
+        for (const item of page.vectors ?? []) {
+          if (item.id) ids.push(item.id);
+        }
+        paginationToken = page.pagination?.next;
+      } while (paginationToken);
+
+      if (ids.length === 0) return [];
+      // `fetch` (unlike `listPaginated`) returns metadata, in one batched
+      // call rather than per-id.
+      const { records } = await scoped.fetch({ ids });
+      return ids.map((id) => ({ id, metadata: records[id]?.metadata as Record<string, unknown> | undefined }));
     },
   };
 }

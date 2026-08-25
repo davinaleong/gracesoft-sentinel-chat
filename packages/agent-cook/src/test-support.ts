@@ -94,13 +94,33 @@ export function fakeAiProviderWithTranscription(transcribedText: string): FakeAi
 
 export class FakeRecipeSourceProvider implements RecipeSourceProvider {
   public findRecipesCalls: FindRecipesInput[] = [];
+  public listRecipesCalls = 0;
 
-  constructor(private readonly results: RecipeSourceResult[]) {}
+  /**
+   * `listResults` is a separate constructor param (not derived from
+   * `results`) rather than always implementing `listRecipes` — some tests
+   * (e.g. the "no listRecipes configured, falls through" case) need a
+   * `RecipeSourceProvider` that structurally lacks `listRecipes` entirely,
+   * matching a real provider that can't enumerate its corpus.
+   */
+  constructor(
+    private readonly results: RecipeSourceResult[],
+    private readonly listResults?: RecipeSourceResult[]
+  ) {
+    if (listResults) {
+      this.listRecipes = async () => {
+        this.listRecipesCalls++;
+        return listResults;
+      };
+    }
+  }
 
   async findRecipes(input: FindRecipesInput): Promise<RecipeSourceResult[]> {
     this.findRecipesCalls.push(input);
     return this.results;
   }
+
+  listRecipes?: () => Promise<RecipeSourceResult[]>;
 }
 
 /** A `FakeRecipeSourceProvider` that always throws, for testing the graceful-degradation path. */
@@ -108,6 +128,16 @@ export function fakeRecipeSourceProviderThatFails(): RecipeSourceProvider {
   return {
     findRecipes: async () => {
       throw new Error("upstream recipe search failed");
+    },
+  };
+}
+
+/** A `RecipeSourceProvider` whose `listRecipes` always throws, for testing the graceful-degradation path. */
+export function fakeRecipeSourceProviderThatFailsToList(): RecipeSourceProvider {
+  return {
+    findRecipes: async () => [],
+    listRecipes: async () => {
+      throw new Error("upstream recipe listing failed");
     },
   };
 }

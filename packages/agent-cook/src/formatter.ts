@@ -57,6 +57,15 @@ export function formatPersonalRecipe(match: PersonalRecipeMatch): string {
   return [`Found it! ${match.title}`, "", match.content].join("\n");
 }
 
+export function formatRecipeList(titles: string[]): string {
+  if (titles.length === 0) return "You don't have any saved recipes yet.";
+  return [
+    `You have ${titles.length} saved recipe${titles.length === 1 ? "" : "s"}:`,
+    "",
+    titles.map((title, idx) => `${idx + 1}. ${title}`).join("\n"),
+  ].join("\n");
+}
+
 export function formatGroceryList(items: string[], dishNames: string[]): string {
   return [
     `Grocery list for ${dishNames.join(", ")}:`,

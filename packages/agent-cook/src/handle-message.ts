@@ -1,10 +1,11 @@
 import type { AIProvider, ConversationState, NormalizedMessage, NormalizedResponse, RecipeSourceProvider } from "@gracesoft-sentinel/core";
 import { classifyDish } from "./dish-classifier.js";
 import { isDietaryAdjustmentRequest } from "./dietary-adjustment.js";
-import { formatGroceryList, formatPersonalRecipe, formatRecipe, formatUnidentifiedDish } from "./formatter.js";
+import { formatGroceryList, formatPersonalRecipe, formatRecipe, formatRecipeList, formatUnidentifiedDish } from "./formatter.js";
 import { generateGroceryList, isGroceryListRequest } from "./grocery-list.js";
 import { findPersonalRecipe, isPersonalRecipeRequest } from "./personal-recipe.js";
 import { generateRecipe, type Recipe } from "./recipe-generator.js";
+import { isRecipeListRequest } from "./recipe-list.js";
 
 export interface CookHandleMessageInput {
   message: NormalizedMessage;
@@ -51,6 +52,8 @@ const PERSONAL_RECIPE_NOT_FOUND =
   "I couldn't find a matching recipe in your saved recipes. Try describing it differently, or send me a dish photo instead.";
 
 const PERSONAL_RECIPE_LOOKUP_FAILED = "Sorry, I couldn't search your saved recipes right now. Please try again in a moment.";
+
+const RECIPE_LIST_FAILED = "Sorry, I couldn't list your saved recipes right now. Please try again in a moment.";
 
 function withContext(state: ConversationState, context: CookContext): ConversationState {
   return { ...state, context, updatedAt: new Date().toISOString() };
@@ -148,6 +151,16 @@ async function handlePersonalRecipeRequest(
   }
 }
 
+/** "How many recipes do I have"/"list my recipes" — enumeration, not a similarity search against one query. */
+async function handleRecipeListRequest(recipeSourceProvider: RecipeSourceProvider, state: ConversationState): Promise<CookHandleMessageResult> {
+  try {
+    const recipes = await recipeSourceProvider.listRecipes!();
+    return { response: { text: formatRecipeList(recipes.map((r) => r.title)) }, state: withContext(state, {}) };
+  } catch {
+    return { response: { text: RECIPE_LIST_FAILED }, state: withContext(state, {}) };
+  }
+}
+
 async function handleGroceryListRequest(
   recentRecipes: Recipe[],
   aiProvider: AIProvider,
@@ -170,7 +183,8 @@ async function handleGroceryListRequest(
  * Cook's entry point — accepts image or text input. A photo always wins
  * (a fresh dish photo takes priority over any lingering dietary-adjustment
  * or awaiting-photo state); otherwise text is checked for a dietary
- * adjustment against the last recipe, then a grocery-list/meal-plan
+ * adjustment against the last recipe, then a recipe-list/count request,
+ * then a specific personal-recipe request, then a grocery-list/meal-plan
  * request against this session's recent recipes, then falls back to
  * prompting for a photo.
  */
@@ -193,6 +207,10 @@ export async function handleMessage(input: CookHandleMessageInput): Promise<Cook
 
   if (context.lastRecipe && isDietaryAdjustmentRequest(text)) {
     return handleDietaryAdjustment(text, context.lastRecipe, aiProvider, context, state);
+  }
+
+  if (recipeSourceProvider?.listRecipes && isRecipeListRequest(text)) {
+    return handleRecipeListRequest(recipeSourceProvider, state);
   }
 
   if (recipeSourceProvider && isPersonalRecipeRequest(text)) {

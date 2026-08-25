@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { formatGroceryList, formatPersonalRecipe, formatRecipe, formatUnidentifiedDish } from "./formatter.js";
+import { formatGroceryList, formatPersonalRecipe, formatRecipe, formatRecipeList, formatUnidentifiedDish } from "./formatter.js";
 import type { Recipe } from "./recipe-generator.js";
 
 const RECIPE: Recipe = {
@@ -65,6 +65,23 @@ describe("formatPersonalRecipe", () => {
     const text = formatPersonalRecipe({ title: "Mom's Chicken Curry", content: "Simmer for 40 minutes..." });
     expect(text).toContain("Mom's Chicken Curry");
     expect(text).toContain("Simmer for 40 minutes...");
+  });
+});
+
+describe("formatRecipeList", () => {
+  it("numbers each title and states the total count", () => {
+    const text = formatRecipeList(["Mom's Chicken Curry", "Grandma's Beef Stew"]);
+    expect(text).toContain("You have 2 saved recipes:");
+    expect(text).toContain("1. Mom's Chicken Curry");
+    expect(text).toContain("2. Grandma's Beef Stew");
+  });
+
+  it("uses singular phrasing for exactly one recipe", () => {
+    expect(formatRecipeList(["Laksa"])).toContain("You have 1 saved recipe:");
+  });
+
+  it("returns a no-recipes message for an empty list, rather than an empty list", () => {
+    expect(formatRecipeList([])).toMatch(/don't have any saved recipes/i);
   });
 });
 

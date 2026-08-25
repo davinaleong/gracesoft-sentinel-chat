@@ -20,4 +20,11 @@ export type FindRecipesInput = z.infer<typeof FindRecipesInputSchema>;
 
 export interface RecipeSourceProvider {
   findRecipes(input: FindRecipesInput): Promise<RecipeSourceResult[]>;
+  /**
+   * Every recipe available from this source — for a bare "how many recipes
+   * do I have"/"list my recipes" request, not a similarity search. Optional:
+   * not every provider can enumerate its full corpus cheaply, so callers
+   * must check for this before calling it.
+   */
+  listRecipes?(): Promise<RecipeSourceResult[]>;
 }

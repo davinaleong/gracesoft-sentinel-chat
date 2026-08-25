@@ -43,7 +43,9 @@ export async function syncDriveRecipesToPinecone(params: SyncDriveRecipesToPinec
       skipped++;
       continue;
     }
-    records.push({ id: doc.id, values: embedding, metadata: { title: doc.title, content: doc.content } });
+    // "name"/"text" (not "title"/"content") to match PineconeRecipeProvider's
+    // read side — see the comment there for why.
+    records.push({ id: doc.id, values: embedding, metadata: { name: doc.title, text: doc.content } });
   }
 
   if (records.length > 0) {

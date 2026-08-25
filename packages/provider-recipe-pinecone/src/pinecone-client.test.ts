@@ -8,11 +8,13 @@ describe("createPineconeClient", () => {
     const client = createPineconeClient({ apiKey: "test-key", indexName: "test-index" });
     expect(typeof client.query).toBe("function");
     expect(typeof client.upsert).toBe("function");
+    expect(typeof client.listAll).toBe("function");
   });
 
   it("also builds cleanly when scoped to a namespace", () => {
     const client = createPineconeClient({ apiKey: "test-key", indexName: "test-index", namespace: "recipes" });
     expect(typeof client.query).toBe("function");
     expect(typeof client.upsert).toBe("function");
+    expect(typeof client.listAll).toBe("function");
   });
 });

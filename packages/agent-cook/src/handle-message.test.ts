@@ -9,6 +9,7 @@ import {
   fakeAiProviderWithTranscription,
   FakeRecipeSourceProvider,
   fakeRecipeSourceProviderThatFails,
+  fakeRecipeSourceProviderThatFailsToList,
 } from "./test-support.js";
 
 function makeMessage(overrides: Partial<NormalizedMessage> = {}): NormalizedMessage {
@@ -292,6 +293,62 @@ describe("handleMessage — personal recipe (Mother's Day Edition)", () => {
       recipeSourceProvider: fakeRecipeSourceProviderThatFails(),
     });
     expect(result.response.text).toMatch(/couldn't search your saved recipes/i);
+  });
+});
+
+describe("handleMessage — recipe list/count", () => {
+  it("lists every recipe when a recipeSourceProvider with listRecipes is configured", async () => {
+    const recipeSourceProvider = new FakeRecipeSourceProvider(
+      [],
+      [
+        { id: "1", title: "Mom's Chicken Curry" },
+        { id: "2", title: "Grandma's Beef Stew" },
+      ]
+    );
+
+    const result = await handleMessage({
+      message: makeMessage({ text: "how many recipes do I have?" }),
+      state: makeState(),
+      aiProvider: fakeAiProviderHappyPath(),
+      recipeSourceProvider,
+    });
+
+    expect(result.response.text).toContain("You have 2 saved recipes");
+    expect(result.response.text).toContain("Mom's Chicken Curry");
+    expect(result.response.text).toContain("Grandma's Beef Stew");
+    expect(recipeSourceProvider.listRecipesCalls).toBe(1);
+  });
+
+  it("replies with a no-recipes message rather than an empty list", async () => {
+    const recipeSourceProvider = new FakeRecipeSourceProvider([], []);
+    const result = await handleMessage({
+      message: makeMessage({ text: "list my recipes" }),
+      state: makeState(),
+      aiProvider: fakeAiProviderHappyPath(),
+      recipeSourceProvider,
+    });
+    expect(result.response.text).toMatch(/don't have any saved recipes/i);
+  });
+
+  it("falls through to the photo prompt when the configured provider can't enumerate its corpus (no listRecipes)", async () => {
+    const recipeSourceProvider = new FakeRecipeSourceProvider([]);
+    const result = await handleMessage({
+      message: makeMessage({ text: "how many recipes do I have?" }),
+      state: makeState(),
+      aiProvider: fakeAiProviderHappyPath(),
+      recipeSourceProvider,
+    });
+    expect(result.response.text).toMatch(/send me a photo/i);
+  });
+
+  it("degrades gracefully, without a silent failure, when listing itself fails", async () => {
+    const result = await handleMessage({
+      message: makeMessage({ text: "what recipes do i have" }),
+      state: makeState(),
+      aiProvider: fakeAiProviderHappyPath(),
+      recipeSourceProvider: fakeRecipeSourceProviderThatFailsToList(),
+    });
+    expect(result.response.text).toMatch(/couldn't list your saved recipes/i);
   });
 });
 

@@ -3,7 +3,7 @@ import { syncDriveRecipesToPinecone } from "./sync-drive-recipes.js";
 import { FakeEmbeddingAiProvider, FakeGoogleDriveClient, FakePineconeClient } from "./test-support.js";
 
 describe("syncDriveRecipesToPinecone", () => {
-  it("embeds every document in the Drive folder and upserts them into Pinecone with title/content metadata", async () => {
+  it("embeds every document in the Drive folder and upserts them into Pinecone with name/text metadata", async () => {
     const driveClient = new FakeGoogleDriveClient([
       { id: "file-1", name: "Mom's Chicken Curry", content: "A rich chicken curry with coconut milk and spices." },
       { id: "file-2", name: "Grandma's Beef Stew", content: "Slow-cooked beef stew with root vegetables." },
@@ -16,8 +16,8 @@ describe("syncDriveRecipesToPinecone", () => {
     expect(result).toEqual({ synced: 2, skipped: 0 });
     expect(pineconeClient.upsertCalls).toHaveLength(1);
     expect(pineconeClient.upsertCalls[0]).toEqual([
-      { id: "file-1", values: expect.any(Array), metadata: { title: "Mom's Chicken Curry", content: "A rich chicken curry with coconut milk and spices." } },
-      { id: "file-2", values: expect.any(Array), metadata: { title: "Grandma's Beef Stew", content: "Slow-cooked beef stew with root vegetables." } },
+      { id: "file-1", values: expect.any(Array), metadata: { name: "Mom's Chicken Curry", text: "A rich chicken curry with coconut milk and spices." } },
+      { id: "file-2", values: expect.any(Array), metadata: { name: "Grandma's Beef Stew", text: "Slow-cooked beef stew with root vegetables." } },
     ]);
   });
 
@@ -45,6 +45,6 @@ describe("syncDriveRecipesToPinecone", () => {
     const { matches } = await pineconeClient.query({ vector: (await aiProvider.embed({ input: "chicken curry" })).vectors[0]!, topK: 3 });
 
     expect(matches[0]!.id).toBe("file-1");
-    expect(matches[0]!.metadata).toMatchObject({ title: "Mom's Chicken Curry" });
+    expect(matches[0]!.metadata).toMatchObject({ name: "Mom's Chicken Curry" });
   });
 });
