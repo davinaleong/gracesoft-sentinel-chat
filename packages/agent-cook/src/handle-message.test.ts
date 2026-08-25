@@ -265,9 +265,13 @@ describe("handleMessage — personal recipe (Mother's Day Edition)", () => {
     expect(recipeSourceProvider.findRecipesCalls).toHaveLength(1);
   });
 
-  it("falls back to the photo prompt when no recipeSourceProvider is configured, even with matching phrasing", async () => {
+  it("falls back to the photo prompt when no recipeSourceProvider is configured and the phrasing doesn't also match free recipe search", async () => {
+    // Deliberately possessive-only phrasing ("my mom's X recipe", dish name
+    // before "recipe") — no "recipe for X" / "how to make X" anywhere, so
+    // this doesn't also satisfy the free-search path below; it's isolating
+    // "no provider configured" from "the phrasing is generically searchable".
     const result = await handleMessage({
-      message: makeMessage({ text: "do you have my mom's recipe for chicken curry?" }),
+      message: makeMessage({ text: "do you have my mom's chicken curry recipe?" }),
       state: makeState(),
       aiProvider: fakeAiProviderHappyPath(),
     });
@@ -293,6 +297,69 @@ describe("handleMessage — personal recipe (Mother's Day Edition)", () => {
       recipeSourceProvider: fakeRecipeSourceProviderThatFails(),
     });
     expect(result.response.text).toMatch(/couldn't search your saved recipes/i);
+  });
+});
+
+describe("handleMessage — free recipe search (no personal source involved)", () => {
+  it("generates a generic recipe from a 'recipe for X' phrase, with no recipeSourceProvider configured", async () => {
+    const result = await handleMessage({
+      message: makeMessage({ text: "recipe for chicken noodle soup" }),
+      state: makeState(),
+      aiProvider: fakeAiProviderHappyPath(),
+    });
+    expect(result.response.text).toContain("Chicken Rice");
+    expect(result.response.text).toContain("Ingredients:");
+    expect((result.state.context as CookContext).lastRecipe?.dishName).toBe("Chicken Rice");
+  });
+
+  it("asks the model for a home-style recipe, not the generic 'provide the full recipe' prompt", async () => {
+    const aiProvider = fakeAiProviderHappyPath();
+    await handleMessage({
+      message: makeMessage({ text: "how do I make a beef stew" }),
+      state: makeState(),
+      aiProvider,
+    });
+    const userMessage = aiProvider.chatCompleteCalls[0]!.messages.find((m) => m.role === "user")!.content;
+    expect(userMessage).toContain("beef stew");
+    expect(userMessage).toMatch(/home-style/i);
+  });
+
+  it("still prefers the personal-source lookup over free search when the phrasing is possessive and a recipeSourceProvider is configured", async () => {
+    const recipeSourceProvider = new FakeRecipeSourceProvider([
+      { id: "1", title: "Mom's Chicken Noodle Soup", raw: { content: "Simmer for 30 minutes." } },
+    ]);
+    const result = await handleMessage({
+      message: makeMessage({ text: "my mom's recipe for chicken noodle soup" }),
+      state: makeState(),
+      aiProvider: fakeAiProviderHappyPath(),
+      recipeSourceProvider,
+    });
+    expect(result.response.text).toContain("Mom's Chicken Noodle Soup");
+    expect(recipeSourceProvider.findRecipesCalls).toHaveLength(1);
+  });
+
+  it("degrades gracefully, without a silent failure, when generation itself fails", async () => {
+    const aiProvider = fakeAiProviderWith(
+      () => {
+        throw new Error("upstream timeout");
+      },
+      () => ({ text: "unused" })
+    );
+    const result = await handleMessage({
+      message: makeMessage({ text: "recipe for pad thai" }),
+      state: makeState(),
+      aiProvider,
+    });
+    expect(result.response.text).toMatch(/couldn't come up with a recipe/i);
+  });
+
+  it("falls through to the photo prompt for text that isn't a recipe-search phrase", async () => {
+    const result = await handleMessage({
+      message: makeMessage({ text: "what are your hours?" }),
+      state: makeState(),
+      aiProvider: fakeAiProviderHappyPath(),
+    });
+    expect(result.response.text).toMatch(/send me a photo/i);
   });
 });
 

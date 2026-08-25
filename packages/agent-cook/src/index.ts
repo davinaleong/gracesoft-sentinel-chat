@@ -8,4 +8,6 @@ export { isDietaryAdjustmentRequest } from "./dietary-adjustment.js";
 export { isGroceryListRequest, generateGroceryList } from "./grocery-list.js";
 export { isPersonalRecipeRequest, findPersonalRecipe } from "./personal-recipe.js";
 export type { PersonalRecipeMatch } from "./personal-recipe.js";
-export { formatRecipe, formatUnidentifiedDish, formatGroceryList, formatPersonalRecipe } from "./formatter.js";
+export { isRecipeListRequest } from "./recipe-list.js";
+export { isRecipeSearchRequest, extractRecipeSearchDishName } from "./recipe-search.js";
+export { formatRecipe, formatUnidentifiedDish, formatGroceryList, formatPersonalRecipe, formatRecipeList } from "./formatter.js";

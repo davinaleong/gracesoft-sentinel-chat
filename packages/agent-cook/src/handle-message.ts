@@ -6,6 +6,7 @@ import { generateGroceryList, isGroceryListRequest } from "./grocery-list.js";
 import { findPersonalRecipe, isPersonalRecipeRequest } from "./personal-recipe.js";
 import { generateRecipe, type Recipe } from "./recipe-generator.js";
 import { isRecipeListRequest } from "./recipe-list.js";
+import { extractRecipeSearchDishName } from "./recipe-search.js";
 
 export interface CookHandleMessageInput {
   message: NormalizedMessage;
@@ -54,6 +55,8 @@ const PERSONAL_RECIPE_NOT_FOUND =
 const PERSONAL_RECIPE_LOOKUP_FAILED = "Sorry, I couldn't search your saved recipes right now. Please try again in a moment.";
 
 const RECIPE_LIST_FAILED = "Sorry, I couldn't list your saved recipes right now. Please try again in a moment.";
+
+const RECIPE_SEARCH_FAILED = "Sorry, I couldn't come up with a recipe for that right now. Please try again in a moment.";
 
 function withContext(state: ConversationState, context: CookContext): ConversationState {
   return { ...state, context, updatedAt: new Date().toISOString() };
@@ -161,6 +164,33 @@ async function handleRecipeListRequest(recipeSourceProvider: RecipeSourceProvide
   }
 }
 
+/**
+ * "Free" recipe search — no personal source involved, no possessive word
+ * in the request ("recipe for chicken noodle soup", not "my recipe for..."):
+ * generates a generic, home-style recipe from scratch for the named dish,
+ * the same way `handlePhoto` does from a classified dish name, just
+ * skipping the photo/classification step entirely.
+ */
+async function handleRecipeSearchRequest(
+  dishName: string,
+  aiProvider: AIProvider,
+  context: CookContext,
+  state: ConversationState
+): Promise<CookHandleMessageResult> {
+  try {
+    const recipe = await generateRecipe({ dishName, aiProvider, homeStyle: true });
+    if (!recipe) {
+      return { response: { text: RECIPE_SEARCH_FAILED }, state: withContext(state, {}) };
+    }
+    return {
+      response: { text: formatRecipe(recipe) },
+      state: withContext(state, { lastRecipe: recipe, recentRecipes: appendRecentRecipe(context.recentRecipes, recipe) }),
+    };
+  } catch {
+    return { response: { text: RECIPE_SEARCH_FAILED }, state: withContext(state, {}) };
+  }
+}
+
 async function handleGroceryListRequest(
   recentRecipes: Recipe[],
   aiProvider: AIProvider,
@@ -184,9 +214,12 @@ async function handleGroceryListRequest(
  * (a fresh dish photo takes priority over any lingering dietary-adjustment
  * or awaiting-photo state); otherwise text is checked for a dietary
  * adjustment against the last recipe, then a recipe-list/count request,
- * then a specific personal-recipe request, then a grocery-list/meal-plan
- * request against this session's recent recipes, then falls back to
- * prompting for a photo.
+ * then a specific personal-recipe request (possessive phrasing, e.g. "my
+ * mom's recipe for..."), then a free recipe search by dish name (no
+ * possessive, e.g. "recipe for chicken noodle soup" — generates a generic
+ * home-style recipe from scratch, no personal source or photo involved),
+ * then a grocery-list/meal-plan request against this session's recent
+ * recipes, then falls back to prompting for a photo.
  */
 export async function handleMessage(input: CookHandleMessageInput): Promise<CookHandleMessageResult> {
   const { message, aiProvider, state, recipeSourceProvider } = input;
@@ -215,6 +248,11 @@ export async function handleMessage(input: CookHandleMessageInput): Promise<Cook
 
   if (recipeSourceProvider && isPersonalRecipeRequest(text)) {
     return handlePersonalRecipeRequest(text, recipeSourceProvider, state);
+  }
+
+  const searchDishName = extractRecipeSearchDishName(text);
+  if (searchDishName) {
+    return handleRecipeSearchRequest(searchDishName, aiProvider, context, state);
   }
 
   if (context.recentRecipes && context.recentRecipes.length > 0 && isGroceryListRequest(text)) {

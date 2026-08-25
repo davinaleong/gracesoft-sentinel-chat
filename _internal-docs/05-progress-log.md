@@ -4,6 +4,25 @@ Companion to `01-milestone-checklist.md`. One entry per work session, newest fir
 
 ---
 
+## 2026-08-24 — Cook: free recipe search by dish name
+
+**Status:** New Cook capability — "recipe for chicken noodle soup" now returns a generated recipe, no photo or personal recipe source required.
+
+**The gap:** Cook could only produce a recipe two ways — a dish photo (`handlePhoto`), or a personal-source RAG lookup gated behind a possessive word ("my recipe for X", "mom's recipe") *and* a configured `recipeSourceProvider`. A bare "recipe for chicken noodle soup" (no possessive, no photo) matched neither path and dead-ended into the generic "send me a dish photo" prompt — a real gap for a chat-based cooking assistant, where typing a dish name is at least as natural as sending a photo.
+
+**What was built:**
+- `recipe-search.ts` — `extractRecipeSearchDishName(text)` / `isRecipeSearchRequest(text)`, deterministic pattern matching in the same style as `personal-recipe.ts`/`grocery-list.ts`: `"recipe for/of X"` and `"how do I/can I/to make X"`. Deliberately narrow (two clear phrasings, not a bare "X recipe" pattern that would false-trigger on any sentence merely containing the word "recipe") — a miss just falls through to the existing photo prompt, so precision was preferred over recall.
+- `generateRecipe()` (in `recipe-generator.ts`) gained an optional `homeStyle` flag: when set, the user prompt explicitly asks for "a generic, home-style recipe — approachable for an everyday home cook ... not a restaurant/chef-style presentation," rather than the bare "provide the full recipe" the photo/dietary-adjustment paths use. Free recipe search has no photo to anchor accuracy to, so leaning generic/approachable is the right default (`homeStyle: true` is only set by the new search path; photo and dietary-adjustment behavior is unchanged).
+- `handle-message.ts`: new `handleRecipeSearchRequest`, wired into the dispatch chain *after* the personal-recipe check and *before* the grocery-list check — so a possessive phrasing ("my mom's recipe for X") still prefers a configured personal source when one exists, and free search only ever fires as the fallback. Needs no `recipeSourceProvider` at all; this is a core Cook capability, not Milestone-11 opt-in.
+
+**A real regression this surfaced:** two existing tests (`agent-cook`'s own `handle-message.test.ts` and `demo-service`'s `switcher-integration.test.ts`) asserted that `"do you have my mom's recipe for chicken curry?"` falls through to the photo prompt when no `recipeSourceProvider` is configured — true before this change, but that exact phrasing also contains "recipe for chicken curry" and now legitimately matches free search instead, generating a recipe rather than dead-ending. Fixed by rephrasing both tests to a possessive-only phrasing with the dish name *before* "recipe" ("my mom's chicken curry recipe") that doesn't also satisfy the new pattern, correctly isolating "no provider configured" from "the phrasing happens to be generically searchable" — the *behavior* change itself is the intended improvement, not a bug.
+
+**Verified locally (all green):** `pnpm lint`, `pnpm typecheck`, `pnpm boundaries` (0 violations, 578 modules/1266 dependencies), `pnpm build`, `pnpm test` — full workspace green, including 9 new tests in `recipe-search.test.ts` and 5 new `handleMessage`-level tests (generic generation, home-style prompt wording, possessive-still-wins-when-configured, graceful failure, non-matching text still falls through).
+
+**Nothing deferred to the user** — no live credentials needed; this reuses the existing `generateRecipe`/`AIProvider.chatComplete` path the photo flow already depends on.
+
+---
+
 ## 2026-08-24 — Mother's Day Edition: refactor from in-memory Drive RAG to a Pinecone index
 
 **Status:** Requested refactor of an already-shipped Milestone 11 feature — recipes are now retrieved from Pinecone at chat time, not by rebuilding an in-memory index from Google Drive on every process.

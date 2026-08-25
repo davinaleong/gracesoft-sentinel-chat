@@ -71,8 +71,16 @@ export async function generateRecipe(params: {
   aiProvider: AIProvider;
   dietaryAdjustment?: string;
   baseRecipe?: Recipe;
+  /**
+   * The free-text recipe-search path (`recipe-search.ts`) has no photo to
+   * anchor accuracy to — just a dish name — so it asks for a generic,
+   * approachable home-cook version explicitly, rather than whatever
+   * elaborate/restaurant-style interpretation the model might otherwise
+   * default to. Ignored when adjusting an existing recipe.
+   */
+  homeStyle?: boolean;
 }): Promise<Recipe | undefined> {
-  const { dishName, aiProvider, dietaryAdjustment, baseRecipe } = params;
+  const { dishName, aiProvider, dietaryAdjustment, baseRecipe, homeStyle } = params;
 
   const userPrompt =
     dietaryAdjustment && baseRecipe
@@ -80,7 +88,10 @@ export async function generateRecipe(params: {
         `Current ingredients: ${baseRecipe.ingredients.join("; ")}. ` +
         `Current steps: ${baseRecipe.steps.join(" ")}. ` +
         `Return the full adjusted recipe in the same JSON shape.`
-      : `Dish: ${dishName}. Provide the full recipe.`;
+      : homeStyle
+        ? `Dish: ${dishName}. Provide a generic, home-style recipe — approachable for an everyday home cook with common ` +
+          `ingredients and equipment, not a restaurant/chef-style presentation.`
+        : `Dish: ${dishName}. Provide the full recipe.`;
 
   const result = await aiProvider.chatComplete({
     messages: [

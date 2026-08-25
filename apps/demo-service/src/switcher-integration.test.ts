@@ -116,7 +116,11 @@ describe("demo-service — switching between real agent-concierge and agent-cook
   it("falls back to Cook's ordinary photo prompt for personal-recipe phrasing when no recipeSourceProvider is configured", async () => {
     const { onMessage } = buildTestSwitcher();
     await onMessage(makeMessage({ text: "/cook" }));
-    const response = await onMessage(makeMessage({ text: "do you have my mom's recipe for chicken curry?" }));
+    // Possessive-only phrasing (dish name before "recipe", no "recipe for X" /
+    // "how to make X") — doesn't also satisfy agent-cook's free recipe
+    // search, which (by design) needs no recipeSourceProvider at all and
+    // would otherwise generate a generic recipe instead of prompting for a photo.
+    const response = await onMessage(makeMessage({ text: "do you have my mom's chicken curry recipe?" }));
     expect(response.text).toMatch(/send me a photo/i);
   });
 

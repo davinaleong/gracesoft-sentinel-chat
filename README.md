@@ -42,7 +42,7 @@ packages/
 
 **Data flow:** a channel webhook hits an `apps/*-service` route → the matching `ChannelAdapter.parseInbound()` turns it into a `NormalizedMessage` → the service layer resolves session state and business config, then calls the agent's `handleMessage()` → the agent calls whatever `AIProvider`/`CalendarProvider`/`RecipeSourceProvider` it was given → the result flows back through `ChannelAdapter.formatOutbound()` to the channel's own reply API.
 
-Notable capabilities: multi-tenant `BusinessConfig` resolution (multiple businesses on one Concierge deployment, keyed by `NormalizedMessage.businessChannelId`), voice-note transcription, grocery-list/meal-plan generation, and an opt-in "Mother's Day Edition" personal-recipe RAG lookup — all documented in the progress log.
+Notable capabilities: multi-tenant `BusinessConfig` resolution (multiple businesses on one Concierge deployment, keyed by `NormalizedMessage.businessChannelId`), voice-note transcription, grocery-list/meal-plan generation, an opt-in "Mother's Day Edition" personal-recipe RAG lookup, and free recipe search by dish name ("recipe for chicken noodle soup" → a generic home-style recipe, no photo or personal source needed) — all documented in the progress log.
 
 ## Getting started
 
